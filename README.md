@@ -2,7 +2,15 @@
 
 **Flappy Bird meets ear training.** Play a note, sing the interval, chain your streak. How far can you go?
 
-🎮 **[Play Now](https://bunsenstraat.github.io/notechaser/)**
+<p align="center">
+  <img src="https://img.shields.io/badge/Zero_Dependencies-0a0a0f?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Single_File-0a0a0f?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Web_Audio_API-0a0a0f?style=for-the-badge&logo=google-chrome&logoColor=00f0ff" />
+</p>
+
+<p align="center">
+  <b><a href="https://bunsenstraat.github.io/notechaser/">▶ Play Now</a></b>
+</p>
 
 ---
 
@@ -21,45 +29,62 @@ Think of it as Flappy Bird, but instead of tapping, you're singing.
 
 Hold the correct pitch (within ±50 cents) for half a second to lock it in. The progress bar fills up as you hold — green means you've got it.
 
+**Press R** during gameplay to replay the base note (use headphones!).
+
 ## Features
 
-- **12 intervals** from minor 2nd to octave
-- **Real-time pitch detection** using autocorrelation — no server, everything runs in your browser
-- **Visual pitch meter** showing how close you are (green = on target, yellow = close, red = way off)
-- **Piano visualization** highlighting base note, target, and what you're singing
-- **Adjustable time limit** with a slider (3–20 seconds)
-- **Presets** — Easy, Triads, All, or build your own set
-- **High score tracking** saved locally
-- **Male vocal range** optimized (C3–E4)
-- **Mobile friendly** — works on phone browsers with mic access
+- 🎤 **Real-time pitch detection** using autocorrelation — no server, everything runs in your browser
+- 🎹 **12 intervals** from minor 2nd to octave
+- ⬆️⬇️ **Direction control** — ascending, descending, or both
+- ⏱️ **Adjustable time limit** with slider (3–20 seconds)
+- 🎯 **Visual pitch meter** — green = on target, yellow = close, red = way off
+- 🎵 **Piano visualization** highlighting base note, target, and what you're singing
+- 🔁 **Replay base note** mid-game with R key
+- 📱 **Mobile friendly** — works on phone browsers with mic access
+- 🏆 **Streak counter** — compete with yourself
 
-## Presets
+## Difficulty Guide
+
+| Level | Setup | You'll feel... |
+|-------|-------|---------------|
+| 🟢 **Beginner** | Perfect 4th + 5th, Up only, 15s | Confident |
+| 🟡 **Intermediate** | Add Major/Minor 3rds, Both directions, 10s | Challenged |
+| 🟠 **Advanced** | Add 2nds + 6ths, 7s | Sweaty |
+| 🔴 **Masochist** | All intervals + tritone, 5s | Pain |
+
+### Presets
 
 | Preset | Intervals |
 |--------|-----------|
 | Easy | Major 2nd, Minor 3rd, Perfect 4th, Perfect 5th |
 | Triads | Minor 3rd, Major 3rd, Perfect 4th, Perfect 5th |
-| All | All 12 intervals |
+| All | All 12 intervals (you brave soul) |
 
 ## Tech
 
-Single `index.html` file. No build step. No dependencies.
+Single `index.html` file. No build step. No dependencies. No excuses.
 
 - **Web Audio API** for note synthesis and microphone input
 - **Autocorrelation pitch detection** with parabolic interpolation
 - Adaptive FFT size for high sample rate devices (mobile)
+- Optimized for **male vocal range** (C3–E4)
 - Deployed via **GitHub Pages**
 
 ## Tips
 
-- Use headphones to prevent the played note from feeding back into pitch detection
-- Start with **Easy** preset and long time limit to get comfortable
-- The pitch meter is your friend — watch the needle and adjust
-- Minor 2nd and Major 7th are brutal. You've been warned.
+- 🎧 **Use headphones** to prevent speaker feedback into pitch detection
+- Start with **Easy** preset and long time limit to build confidence
+- Watch the pitch meter — it tells you if you're sharp or flat
+- Minor 2nd and Major 7th are brutal. Tritone is evil. You've been warned.
 
 ## Run locally
 
-Just open `index.html` in a browser. That's it. Needs microphone permission and a modern browser with Web Audio API support.
+```
+# That's it. Just open it.
+open index.html
+```
+
+Needs microphone permission and a modern browser with Web Audio API support.
 
 ## License
 
