@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NoteChaser</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Chakra+Petch:wght@300;400;600;700&display=swap');
+
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+
+/* Hide scrollbars */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; }
+
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --surface2: #1a1a26;
+  --border: #2a2a3a;
+  --cyan: #00f0ff;
+  --cyan-dim: #00f0ff44;
+  --magenta: #ff00aa;
+  --magenta-dim: #ff00aa44;
+  --green: #00ff88;
+  --green-dim: #00ff8844;
+  --red: #ff3355;
+  --red-dim: #ff335544;
+  --yellow: #ffcc00;
+  --text: #e8e8f0;
+  --text-dim: #888899;
+  --glow-cyan: 0 0 20px #00f0ff66, 0 0 40px #00f0ff22;
+  --glow-magenta: 0 0 20px #ff00aa66, 0 0 40px #ff00aa22;
+  --glow-green: 0 0 20px #00ff8866, 0 0 40px #00ff8822;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Chakra Petch', sans-serif;
+  overflow: hidden;
+}
+
+/* Scanline overlay */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.08) 2px,
+    rgba(0,0,0,0.08) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Background grid */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,240,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,240,255,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── HEADER ── */
+.header {
+  text-align: center;
+  padding: 16px 0 12px;
+  flex-shrink: 0;
+}
+
+.logo {
+  font-family: 'Orbitron', monospace;
+  font-size: 2.2rem;
+  font-weight: 900;
+  letter-spacing: 6px;
+  background: linear-gradient(135deg, var(--cyan), var(--magenta));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: none;
+  filter: drop-shadow(0 0 12px rgba(0,240,255,0.3));
+  text-transform: uppercase;
+}
+
+.logo-sub {
+  font-size: 0.7rem;
+  letter-spacing: 8px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* ── SCREENS ── */
+.screen {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+}
+.screen.active {
+  display: flex;
+}
+
+/* ── SETUP SCREEN ── */
+#setup {
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.section-label {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 4px;
+  color: var(--cyan);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.interval-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.interval-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 10px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  line-height: 1.3;
+  user-select: none;
+}
+
+.interval-btn:hover {
+  border-color: var(--cyan-dim);
+  background: var(--surface2);
+}
+
+.interval-btn.selected {
+  background: linear-gradient(135deg, rgba(0,240,255,0.12), rgba(255,0,170,0.08));
+  border-color: var(--cyan);
+  color: var(--text);
+  box-shadow: var(--glow-cyan);
+}
+
+.direction-row {
+  display: flex;
+  gap: 8px;
+}
+
+.dir-btn {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.dir-btn:hover {
+  border-color: var(--cyan-dim);
+}
+
+.dir-btn.selected {
+  background: linear-gradient(135deg, rgba(0,240,255,0.1), rgba(255,0,170,0.06));
+  border-color: var(--cyan);
+  color: var(--text);
+}
+
+.preset-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.preset-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.72rem;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.preset-btn:hover {
+  border-color: var(--magenta-dim);
+  color: var(--text);
+}
+
+.time-slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 4px;
+}
+.time-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface2);
+  outline: none;
+}
+.time-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--cyan);
+  cursor: pointer;
+  box-shadow: var(--glow-cyan);
+}
+.time-label {
+  font-family: 'Orbitron', monospace;
+  font-size: 1rem;
+  color: var(--cyan);
+  min-width: 36px;
+  text-align: right;
+}
+
+.start-btn {
+  background: linear-gradient(135deg, var(--cyan), var(--magenta));
+  border: none;
+  color: #000;
+  font-family: 'Orbitron', monospace;
+  font-size: 1.1rem;
+  font-weight: 900;
+  padding: 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  transition: all 0.3s;
+  margin-top: auto;
+  flex-shrink: 0;
+}
+
+.start-btn:hover {
+  transform: scale(1.02);
+  box-shadow: var(--glow-cyan), var(--glow-magenta);
+}
+
+.start-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ── GAME SCREEN ── */
+#game {
+  gap: 12px;
+  position: relative;
+}
+
+.game-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.score-display {
+  font-family: 'Orbitron', monospace;
+  font-size: 1.3rem;
+  font-weight: 900;
+  color: var(--cyan);
+  text-shadow: var(--glow-cyan);
+}
+
+.score-label {
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  letter-spacing: 3px;
+}
+
+.hi-score {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.timer-bar-wrap {
+  height: 4px;
+  background: var(--surface2);
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.timer-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--green), var(--yellow), var(--red));
+  border-radius: 2px;
+  transition: width 0.1s linear;
+  width: 100%;
+}
+
+/* Challenge display */
+.challenge-area {
+  flex: 0 0 auto;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.interval-name {
+  font-family: 'Orbitron', monospace;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--magenta);
+  text-shadow: var(--glow-magenta);
+  margin-bottom: 8px;
+}
+
+.note-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 30px;
+  margin-top: 10px;
+}
+
+.note-box {
+  text-align: center;
+}
+
+.note-box-label {
+  font-size: 0.6rem;
+  letter-spacing: 3px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.note-box-value {
+  font-family: 'Orbitron', monospace;
+  font-size: 2.2rem;
+  font-weight: 900;
+}
+
+.note-from { color: var(--text-dim); }
+.note-target { color: var(--cyan); text-shadow: var(--glow-cyan); }
+
+.arrow-dir {
+  font-size: 2rem;
+  color: var(--magenta);
+  animation: arrowPulse 1s ease-in-out infinite;
+}
+
+@keyframes arrowPulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* Piano visualization */
+.piano-wrap {
+  flex: 0 0 auto;
+  padding: 12px 0;
+}
+
+.piano {
+  position: relative;
+  height: 70px;
+  display: flex;
+  margin: 0 auto;
+  max-width: 100%;
+  border-radius: 0 0 4px 4px;
+  overflow: hidden;
+}
+
+.piano-key {
+  flex: 1;
+  background: linear-gradient(180deg, #e8e8e8, #d0d0d0);
+  border: 1px solid #999;
+  border-radius: 0 0 3px 3px;
+  position: relative;
+  min-width: 0;
+}
+
+.piano-key.black {
+  background: linear-gradient(180deg, #333, #111);
+  border-color: #000;
+  margin: 0 -3%;
+  z-index: 2;
+  flex: 0.6;
+  height: 60%;
+}
+
+.piano-key.active-from {
+  background: linear-gradient(180deg, var(--magenta), #aa0066) !important;
+  box-shadow: 0 0 12px var(--magenta);
+}
+
+.piano-key.active-target {
+  background: linear-gradient(180deg, var(--cyan), #0088aa) !important;
+  box-shadow: 0 0 12px var(--cyan);
+}
+
+.piano-key.active-singing {
+  background: linear-gradient(180deg, var(--green), #00aa55) !important;
+  box-shadow: 0 0 12px var(--green);
+}
+
+/* Pitch meter */
+.pitch-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  min-height: 0;
+}
+
+.pitch-meter-wrap {
+  position: relative;
+  height: 50px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pitch-meter-center {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--cyan);
+  box-shadow: var(--glow-cyan);
+  z-index: 3;
+}
+
+.pitch-meter-zones {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+.pitch-zone {
+  flex: 1;
+}
+
+.pitch-zone.far-low { background: rgba(255,51,85,0.08); }
+.pitch-zone.low { background: rgba(255,204,0,0.06); }
+.pitch-zone.center-zone { background: rgba(0,255,136,0.08); }
+.pitch-zone.high { background: rgba(255,204,0,0.06); }
+.pitch-zone.far-high { background: rgba(255,51,85,0.08); }
+
+.pitch-needle {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 6px;
+  background: var(--green);
+  border-radius: 3px;
+  box-shadow: var(--glow-green);
+  transition: left 0.08s ease-out, background 0.2s;
+  z-index: 4;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.pitch-needle.off-pitch {
+  background: var(--red);
+  box-shadow: 0 0 12px var(--red);
+}
+
+.pitch-needle.close {
+  background: var(--yellow);
+  box-shadow: 0 0 12px var(--yellow);
+}
+
+.singing-note {
+  text-align: center;
+  font-family: 'Orbitron', monospace;
+  font-size: 1rem;
+  color: var(--text-dim);
+  min-height: 1.4em;
+}
+
+.singing-note span {
+  color: var(--green);
+  text-shadow: var(--glow-green);
+}
+
+/* Progress fill for correct hold */
+.hold-progress-wrap {
+  height: 6px;
+  background: var(--surface2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.hold-progress {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--green));
+  border-radius: 3px;
+  width: 0%;
+  transition: width 0.05s linear;
+}
+
+/* Success flash */
+.success-flash {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(0,255,136,0.2), transparent 70%);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 100;
+}
+
+.success-flash.show {
+  animation: flashIn 0.4s ease-out;
+}
+
+@keyframes flashIn {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Streak dots */
+.streak-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+  flex-shrink: 0;
+}
+
+.streak-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: var(--glow-cyan);
+  animation: dotIn 0.3s ease-out;
+}
+
+@keyframes dotIn {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.4); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ── GAME OVER ── */
+#gameover {
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  text-align: center;
+}
+
+.go-title {
+  font-family: 'Orbitron', monospace;
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--red);
+  text-shadow: 0 0 30px rgba(255,51,85,0.5);
+  letter-spacing: 6px;
+}
+
+.go-score {
+  font-family: 'Orbitron', monospace;
+  font-size: 4rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--cyan), var(--magenta));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+}
+
+.go-score-label {
+  font-size: 0.7rem;
+  letter-spacing: 4px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.go-best {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.85rem;
+  color: var(--yellow);
+}
+
+.go-new-best {
+  color: var(--green);
+  text-shadow: var(--glow-green);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.retry-btn {
+  background: linear-gradient(135deg, var(--cyan), var(--magenta));
+  border: none;
+  color: #000;
+  font-family: 'Orbitron', monospace;
+  font-size: 1rem;
+  font-weight: 900;
+  padding: 14px 40px;
+  border-radius: 8px;
+  cursor: pointer;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  transition: all 0.3s;
+}
+
+.retry-btn:hover {
+  transform: scale(1.05);
+  box-shadow: var(--glow-cyan), var(--glow-magenta);
+}
+
+.back-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.8rem;
+  padding: 8px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.back-btn:hover {
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+
+/* Mic permission hint */
+.mic-hint {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 4px;
+}
+
+/* Responsive */
+@media (max-height: 700px) {
+  .logo { font-size: 1.6rem; }
+  .challenge-area { padding: 10px 0; }
+  .interval-name { font-size: 1.2rem; }
+  .note-box-value { font-size: 1.6rem; }
+  .piano { height: 50px; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <div class="logo">NoteChaser</div>
+    <div class="logo-sub">Interval Training</div>
+  </div>
+
+  <!-- SETUP SCREEN -->
+  <div id="setup" class="screen active">
+    <div class="section-label">Intervals</div>
+    <div class="interval-grid" id="intervalGrid"></div>
+
+    <div class="section-label">Direction</div>
+    <div class="direction-row">
+      <button class="dir-btn selected" data-dir="up" onclick="toggleDir('up')">&#9650; Up</button>
+      <button class="dir-btn selected" data-dir="down" onclick="toggleDir('down')">&#9660; Down</button>
+    </div>
+
+    <div class="section-label">Presets</div>
+    <div class="preset-row">
+      <button class="preset-btn" onclick="preset('easy')">Easy</button>
+      <button class="preset-btn" onclick="preset('triads')">Triads</button>
+      <button class="preset-btn" onclick="preset('all')">All</button>
+      <button class="preset-btn" onclick="preset('none')">Clear</button>
+    </div>
+
+    <div class="section-label">TIME PER NOTE</div>
+    <div class="time-slider-wrap">
+      <input type="range" id="timeSlider" class="time-slider" min="3" max="20" value="7" step="1" oninput="updateTimeLabel()">
+      <div class="time-label" id="timeLabel">7s</div>
+    </div>
+
+    <div class="mic-hint">Microphone access required for pitch detection</div>
+    <button class="start-btn" id="startBtn" onclick="startGame()">Start</button>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div id="game" class="screen">
+    <div class="game-top">
+      <div>
+        <div class="score-label">STREAK</div>
+        <div class="score-display" id="scoreDisplay">0</div>
+      </div>
+      <div class="hi-score" id="hiScoreGame">BEST: 0</div>
+    </div>
+
+    <div class="timer-bar-wrap">
+      <div class="timer-bar" id="timerBar"></div>
+    </div>
+
+    <div class="challenge-area">
+      <div class="interval-name" id="intervalDisplay">Major 3rd Up</div>
+      <div class="note-row">
+        <div class="note-box">
+          <div class="note-box-label">From</div>
+          <div class="note-box-value note-from" id="noteFrom">C3</div>
+        </div>
+        <div class="arrow-dir" id="arrowDir">&#9650;</div>
+        <div class="note-box">
+          <div class="note-box-label">Sing</div>
+          <div class="note-box-value note-target" id="noteTarget">E3</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="piano-wrap">
+      <div class="piano" id="piano"></div>
+    </div>
+
+    <div class="pitch-area">
+      <div class="pitch-meter-wrap">
+        <div class="pitch-meter-zones">
+          <div class="pitch-zone far-low"></div>
+          <div class="pitch-zone low"></div>
+          <div class="pitch-zone center-zone"></div>
+          <div class="pitch-zone high"></div>
+          <div class="pitch-zone far-high"></div>
+        </div>
+        <div class="pitch-meter-center"></div>
+        <div class="pitch-needle" id="pitchNeedle"></div>
+      </div>
+      <div class="singing-note" id="singingNote">&nbsp;</div>
+      <div class="hold-progress-wrap">
+        <div class="hold-progress" id="holdProgress"></div>
+      </div>
+    </div>
+
+    <div class="streak-dots" id="streakDots"></div>
+
+    <div class="success-flash" id="successFlash"></div>
+  </div>
+
+  <!-- GAME OVER SCREEN -->
+  <div id="gameover" class="screen">
+    <div class="go-title">GAME OVER</div>
+    <div>
+      <div class="go-score" id="goScore">0</div>
+      <div class="go-score-label">Intervals Nailed</div>
+    </div>
+    <div class="go-best" id="goBest">BEST: 0</div>
+    <button class="retry-btn" onclick="retryGame()">Play Again</button>
+    <button class="back-btn" onclick="backToSetup()">Change Intervals</button>
+  </div>
+</div>
+
+<script>
+// ── NOTE / INTERVAL DATA ──
+const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+const INTERVALS = [
+  { name: 'Minor 2nd',  semitones: 1,  short: 'm2' },
+  { name: 'Major 2nd',  semitones: 2,  short: 'M2' },
+  { name: 'Minor 3rd',  semitones: 3,  short: 'm3' },
+  { name: 'Major 3rd',  semitones: 4,  short: 'M3' },
+  { name: 'Perfect 4th', semitones: 5, short: 'P4' },
+  { name: 'Tritone',    semitones: 6,  short: 'TT' },
+  { name: 'Perfect 5th', semitones: 7, short: 'P5' },
+  { name: 'Minor 6th',  semitones: 8,  short: 'm6' },
+  { name: 'Major 6th',  semitones: 9,  short: 'M6' },
+  { name: 'Minor 7th',  semitones: 10, short: 'm7' },
+  { name: 'Major 7th',  semitones: 11, short: 'M7' },
+  { name: 'Octave',     semitones: 12, short: 'P8' },
+];
+
+// MIDI note helpers: A4 = 69 = 440Hz
+function midiToFreq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+function freqToMidi(freq) { return 69 + 12 * Math.log2(freq / 440); }
+function midiToName(midi) {
+  const note = NOTE_NAMES[((midi % 12) + 12) % 12];
+  const octave = Math.floor(midi / 12) - 1;
+  return note + octave;
+}
+function midiToNoteLetter(midi) {
+  return NOTE_NAMES[((midi % 12) + 12) % 12];
+}
+
+// Male comfortable range
+const RANGE_LOW = 48;   // C3
+const RANGE_HIGH = 57;  // A3
+const RANGE_ABS_LOW = 48;  // C3
+const RANGE_ABS_HIGH = 64; // E4
+
+// ── STATE ──
+let selectedIntervals = new Set();
+let dirUp = true, dirDown = true;
+let audioCtx = null;
+let analyser = null;
+let micStream = null;
+let gameActive = false;
+let score = 0;
+let hiScore = parseInt(localStorage.getItem('notechaser_hi') || '0');
+let currentBaseMidi = Math.floor(Math.random() * (RANGE_HIGH - RANGE_LOW + 1)) + RANGE_LOW;
+let currentTargetMidi = 49;
+let currentInterval = null;
+let currentDir = 1;
+let holdStart = 0;
+const HOLD_REQUIRED = 500; // ms to hold correct pitch
+let TIMEOUT = 7000; // ms before game over
+let roundStart = 0;
+let animFrame = null;
+let pitchBuffer = new Float32Array(2048);
+
+// ── SETUP UI ──
+const grid = document.getElementById('intervalGrid');
+INTERVALS.forEach((iv, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'interval-btn';
+  btn.textContent = iv.name;
+  btn.dataset.idx = i;
+  btn.addEventListener('click', () => {
+    if (selectedIntervals.has(i)) {
+      selectedIntervals.delete(i);
+      btn.classList.remove('selected');
+    } else {
+      selectedIntervals.add(i);
+      btn.classList.add('selected');
+    }
+    updateStartBtn();
+  });
+  grid.appendChild(btn);
+});
+
+function toggleDir(d) {
+  if (d === 'up') dirUp = !dirUp;
+  else dirDown = !dirDown;
+  if (!dirUp && !dirDown) {
+    if (d === 'up') dirDown = true;
+    else dirUp = true;
+  }
+  document.querySelector('[data-dir="up"]').classList.toggle('selected', dirUp);
+  document.querySelector('[data-dir="down"]').classList.toggle('selected', dirDown);
+}
+
+function preset(p) {
+  const btns = grid.querySelectorAll('.interval-btn');
+  selectedIntervals.clear();
+  btns.forEach(b => b.classList.remove('selected'));
+  if (p === 'easy') {
+    [1,2,4,6].forEach(i => { selectedIntervals.add(i); btns[i].classList.add('selected'); });
+  } else if (p === 'triads') {
+    [2,3,4,6].forEach(i => { selectedIntervals.add(i); btns[i].classList.add('selected'); });
+  } else if (p === 'all') {
+    INTERVALS.forEach((_, i) => { selectedIntervals.add(i); btns[i].classList.add('selected'); });
+  }
+  updateStartBtn();
+}
+
+function updateStartBtn() {
+  document.getElementById('startBtn').disabled = selectedIntervals.size === 0;
+}
+
+// Default: easy
+preset('easy');
+
+// ── PIANO BUILD ──
+function buildPiano() {
+  const piano = document.getElementById('piano');
+  piano.innerHTML = '';
+  // Show range from C3 (48) to E4 (64)
+  for (let midi = RANGE_ABS_LOW; midi <= RANGE_ABS_HIGH; midi++) {
+    const noteIdx = midi % 12;
+    const isBlack = [1,3,6,8,10].includes(noteIdx);
+    const key = document.createElement('div');
+    key.className = 'piano-key' + (isBlack ? ' black' : '');
+    key.dataset.midi = midi;
+    piano.appendChild(key);
+  }
+}
+buildPiano();
+
+function updatePianoHighlights(fromMidi, targetMidi, singingMidi) {
+  document.querySelectorAll('.piano-key').forEach(k => {
+    k.classList.remove('active-from', 'active-target', 'active-singing');
+    const m = parseInt(k.dataset.midi);
+    if (m === fromMidi) k.classList.add('active-from');
+    if (m === targetMidi) k.classList.add('active-target');
+    if (singingMidi !== null && m === singingMidi) k.classList.add('active-singing');
+  });
+}
+
+// ── AUDIO ──
+function initAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function playNote(midi, duration = 0.6) {
+  initAudio();
+  const freq = midiToFreq(midi);
+  const now = audioCtx.currentTime;
+
+  // Rich tone: triangle + sine
+  const osc1 = audioCtx.createOscillator();
+  const osc2 = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc1.type = 'triangle';
+  osc1.frequency.value = freq;
+  osc2.type = 'sine';
+  osc2.frequency.value = freq;
+
+  const mix1 = audioCtx.createGain();
+  const mix2 = audioCtx.createGain();
+  mix1.gain.value = 0.5;
+  mix2.gain.value = 0.3;
+
+  osc1.connect(mix1);
+  osc2.connect(mix2);
+  mix1.connect(gain);
+  mix2.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  // Envelope
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(0.35, now + 0.03);
+  gain.gain.exponentialRampToValueAtTime(0.15, now + duration * 0.5);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+  osc1.start(now);
+  osc2.start(now);
+  osc1.stop(now + duration);
+  osc2.stop(now + duration);
+}
+
+function playSuccessChime() {
+  initAudio();
+  const now = audioCtx.currentTime;
+  [0, 0.08, 0.16].forEach((t, i) => {
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = [880, 1108.73, 1318.51][i]; // A5, C#6, E6
+    osc.connect(g);
+    g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(0, now + t);
+    g.gain.linearRampToValueAtTime(0.12, now + t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.25);
+    osc.start(now + t);
+    osc.stop(now + t + 0.25);
+  });
+}
+
+function playFailSound() {
+  initAudio();
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(200, now);
+  osc.frequency.linearRampToValueAtTime(80, now + 0.4);
+  osc.connect(g);
+  g.connect(audioCtx.destination);
+  g.gain.setValueAtTime(0.15, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+  osc.start(now);
+  osc.stop(now + 0.5);
+}
+
+// ── PITCH DETECTION (Autocorrelation) ──
+async function startMic() {
+  micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  initAudio();
+  const source = audioCtx.createMediaStreamSource(micStream);
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 4096;
+  source.connect(analyser);
+  pitchBuffer = new Float32Array(analyser.fftSize);
+}
+
+function stopMic() {
+  if (micStream) {
+    micStream.getTracks().forEach(t => t.stop());
+    micStream = null;
+  }
+}
+
+function detectPitch() {
+  if (!analyser) return null;
+  analyser.getFloatTimeDomainData(pitchBuffer);
+
+  // Check RMS to filter silence
+  let rms = 0;
+  for (let i = 0; i < pitchBuffer.length; i++) rms += pitchBuffer[i] * pitchBuffer[i];
+  rms = Math.sqrt(rms / pitchBuffer.length);
+  if (rms < 0.01) return null;
+
+  // Autocorrelation
+  const SIZE = pitchBuffer.length;
+  const corr = new Float32Array(SIZE);
+  for (let lag = 0; lag < SIZE; lag++) {
+    let sum = 0;
+    for (let i = 0; i < SIZE - lag; i++) {
+      sum += pitchBuffer[i] * pitchBuffer[i + lag];
+    }
+    corr[lag] = sum;
+  }
+
+  // Find first dip then peak
+  let d = 0;
+  while (d < SIZE - 1 && corr[d] > corr[d + 1]) d++;
+
+  let maxVal = -1, maxIdx = -1;
+  const sampleRate = audioCtx.sampleRate;
+  const minLag = Math.floor(sampleRate / 600); // max ~600Hz
+  const maxLag = Math.floor(sampleRate / 55);  // min ~55Hz
+
+  for (let i = Math.max(d, minLag); i < Math.min(SIZE - 1, maxLag); i++) {
+    if (corr[i] > maxVal) {
+      maxVal = corr[i];
+      maxIdx = i;
+    }
+  }
+
+  if (maxIdx === -1 || maxVal < 0.01) return null;
+
+  // Parabolic interpolation for better accuracy
+  const y1 = maxIdx > 0 ? corr[maxIdx - 1] : corr[maxIdx];
+  const y2 = corr[maxIdx];
+  const y3 = maxIdx < SIZE - 1 ? corr[maxIdx + 1] : corr[maxIdx];
+  const shift = (y3 - y1) / (2 * (2 * y2 - y1 - y3));
+  const refinedLag = maxIdx + (isFinite(shift) ? shift : 0);
+
+  const freq = sampleRate / refinedLag;
+  if (freq < 55 || freq > 600) return null;
+
+  // Confidence check
+  if (corr[maxIdx] / corr[0] < 0.3) return null;
+
+  return freq;
+}
+
+// ── GAME LOGIC ──
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function chooseNextChallenge() {
+  const intervals = [...selectedIntervals].map(i => INTERVALS[i]);
+  const dirs = [];
+  if (dirUp) dirs.push(1);
+  if (dirDown) dirs.push(-1);
+
+  // Try to pick a valid combo
+  for (let attempts = 0; attempts < 50; attempts++) {
+    const iv = intervals[Math.floor(Math.random() * intervals.length)];
+    let d = dirs[Math.floor(Math.random() * dirs.length)];
+
+    // Bias direction to stay in range
+    const target = currentBaseMidi + d * iv.semitones;
+    if (target < RANGE_LOW && d === -1 && dirs.includes(1)) d = 1;
+    if (target > RANGE_HIGH && d === 1 && dirs.includes(-1)) d = -1;
+
+    const finalTarget = currentBaseMidi + d * iv.semitones;
+    if (finalTarget >= RANGE_ABS_LOW && finalTarget <= RANGE_ABS_HIGH) {
+      currentInterval = iv;
+      currentDir = d;
+      currentTargetMidi = finalTarget;
+      return;
+    }
+  }
+
+  // Fallback: just pick something in range
+  const iv = intervals[0];
+  currentDir = currentBaseMidi > 48 ? -1 : 1;
+  currentInterval = iv;
+  currentTargetMidi = currentBaseMidi + currentDir * iv.semitones;
+}
+
+function updateDisplay() {
+  const dirLabel = currentDir > 0 ? 'Up' : 'Down';
+  document.getElementById('intervalDisplay').textContent = `${currentInterval.name} ${dirLabel}`;
+  document.getElementById('noteFrom').textContent = midiToName(currentBaseMidi);
+  document.getElementById('noteTarget').textContent = midiToName(currentTargetMidi);
+  document.getElementById('arrowDir').innerHTML = currentDir > 0 ? '&#9650;' : '&#9660;';
+  document.getElementById('scoreDisplay').textContent = score;
+  document.getElementById('hiScoreGame').textContent = `BEST: ${hiScore}`;
+
+  updatePianoHighlights(currentBaseMidi, currentTargetMidi, null);
+}
+
+function updateTimeLabel() {
+  const v = document.getElementById('timeSlider').value;
+  document.getElementById('timeLabel').textContent = v + 's';
+}
+
+async function startGame() {
+  TIMEOUT = parseInt(document.getElementById('timeSlider').value) * 1000;
+  try {
+    await startMic();
+  } catch (e) {
+    alert('Microphone access is required for NoteChaser. Please allow mic access and try again.');
+    return;
+  }
+
+  initAudio();
+  score = 0;
+  currentBaseMidi = Math.floor(Math.random() * (RANGE_HIGH - RANGE_LOW + 1)) + RANGE_LOW;
+  holdStart = 0;
+
+  chooseNextChallenge();
+  showScreen('game');
+  updateDisplay();
+
+  document.getElementById('streakDots').innerHTML = '';
+  document.getElementById('holdProgress').style.width = '0%';
+  document.getElementById('singingNote').innerHTML = '&nbsp;';
+
+  // Play the base note
+  setTimeout(() => playNote(currentBaseMidi), 300);
+
+  gameActive = true;
+  roundStart = performance.now();
+  gameLoop();
+}
+
+function gameLoop() {
+  if (!gameActive) return;
+
+  const now = performance.now();
+  const elapsed = now - roundStart;
+
+  // Timer bar
+  const pct = Math.max(0, 1 - elapsed / TIMEOUT);
+  document.getElementById('timerBar').style.width = (pct * 100) + '%';
+
+  // Timeout
+  if (elapsed > TIMEOUT) {
+    endGame();
+    return;
+  }
+
+  // Pitch detection
+  const freq = detectPitch();
+  const needle = document.getElementById('pitchNeedle');
+  const singingEl = document.getElementById('singingNote');
+  const holdBar = document.getElementById('holdProgress');
+
+  if (freq) {
+    const midi = freqToMidi(freq);
+    const roundedMidi = Math.round(midi);
+    const noteName = midiToName(roundedMidi);
+    const centsOff = (midi - currentTargetMidi) * 100; // cents from target
+
+    // Update needle position (range: -200 to +200 cents mapped to 0-100%)
+    const needlePos = 50 + (centsOff / 400) * 100;
+    const clampedPos = Math.max(2, Math.min(98, needlePos));
+    needle.style.left = clampedPos + '%';
+
+    // Color based on accuracy
+    const absCents = Math.abs(centsOff);
+    if (absCents < 50) {
+      needle.className = 'pitch-needle';
+    } else if (absCents < 100) {
+      needle.className = 'pitch-needle close';
+    } else {
+      needle.className = 'pitch-needle off-pitch';
+    }
+
+    singingEl.innerHTML = `You: <span>${noteName}</span>`;
+    updatePianoHighlights(currentBaseMidi, currentTargetMidi, roundedMidi);
+
+    // Check if correct
+    if (absCents < 50) {
+      if (holdStart === 0) holdStart = now;
+      const held = now - holdStart;
+      holdBar.style.width = Math.min(100, (held / HOLD_REQUIRED) * 100) + '%';
+
+      if (held >= HOLD_REQUIRED) {
+        // SUCCESS
+        onSuccess();
+        return;
+      }
+    } else {
+      holdStart = 0;
+      holdBar.style.width = '0%';
+    }
+  } else {
+    needle.style.left = '50%';
+    needle.className = 'pitch-needle';
+    singingEl.innerHTML = '&nbsp;';
+    holdStart = 0;
+    holdBar.style.width = '0%';
+    updatePianoHighlights(currentBaseMidi, currentTargetMidi, null);
+  }
+
+  animFrame = requestAnimationFrame(gameLoop);
+}
+
+function onSuccess() {
+  score++;
+  playSuccessChime();
+
+  // Flash
+  const flash = document.getElementById('successFlash');
+  flash.classList.remove('show');
+  void flash.offsetWidth;
+  flash.classList.add('show');
+
+  // Streak dot
+  const dot = document.createElement('div');
+  dot.className = 'streak-dot';
+  document.getElementById('streakDots').appendChild(dot);
+
+  // New base = old target
+  currentBaseMidi = currentTargetMidi;
+  holdStart = 0;
+  document.getElementById('holdProgress').style.width = '0%';
+
+  chooseNextChallenge();
+  updateDisplay();
+
+  // Play the new base note
+  setTimeout(() => playNote(currentBaseMidi), 200);
+
+  roundStart = performance.now();
+  animFrame = requestAnimationFrame(gameLoop);
+}
+
+function endGame() {
+  gameActive = false;
+  if (animFrame) cancelAnimationFrame(animFrame);
+  stopMic();
+
+  playFailSound();
+
+  const isNewBest = score > hiScore;
+  if (isNewBest) {
+    hiScore = score;
+    localStorage.setItem('notechaser_hi', hiScore);
+  }
+
+  document.getElementById('goScore').textContent = score;
+  const bestEl = document.getElementById('goBest');
+  if (isNewBest && score > 0) {
+    bestEl.textContent = 'NEW BEST!';
+    bestEl.className = 'go-best go-new-best';
+  } else {
+    bestEl.textContent = `BEST: ${hiScore}`;
+    bestEl.className = 'go-best';
+  }
+
+  showScreen('gameover');
+}
+
+function retryGame() {
+  startGame();
+}
+
+function backToSetup() {
+  showScreen('setup');
+}
+
+// Prevent start with nothing selected
+updateStartBtn();
+</script>
+
+</body>
+</html>
