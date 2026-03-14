@@ -1012,13 +1012,29 @@ function playFailSound() {
 
 // ── PITCH DETECTION (Autocorrelation) ──
 async function startMic() {
-  micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  // On mobile, try without constraints first if strict constraints fail
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+  } catch(e) {
+    // Fallback for mobile browsers that reject those constraints
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  }
+  micStream = stream;
   initAudio();
+  // Resume AudioContext (required on mobile after user gesture)
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
   const source = audioCtx.createMediaStreamSource(micStream);
   analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 4096;
+  // Use larger FFT for better low-frequency resolution on high sample rate devices
+  const sr = audioCtx.sampleRate;
+  analyser.fftSize = sr > 44100 ? 8192 : 4096;
+  analyser.smoothingTimeConstant = 0;
   source.connect(analyser);
   pitchBuffer = new Float32Array(analyser.fftSize);
+  console.log('Mic started: sampleRate=' + sr + ', fftSize=' + analyser.fftSize);
 }
 
 function stopMic() {
@@ -1032,11 +1048,11 @@ function detectPitch() {
   if (!analyser) return null;
   analyser.getFloatTimeDomainData(pitchBuffer);
 
-  // Check RMS to filter silence
+  // Check RMS to filter silence (lower threshold for mobile mics)
   let rms = 0;
   for (let i = 0; i < pitchBuffer.length; i++) rms += pitchBuffer[i] * pitchBuffer[i];
   rms = Math.sqrt(rms / pitchBuffer.length);
-  if (rms < 0.01) return null;
+  if (rms < 0.005) return null;
 
   // Autocorrelation
   const SIZE = pitchBuffer.length;
@@ -1077,8 +1093,8 @@ function detectPitch() {
   const freq = sampleRate / refinedLag;
   if (freq < 55 || freq > 600) return null;
 
-  // Confidence check
-  if (corr[maxIdx] / corr[0] < 0.3) return null;
+  // Confidence check (relaxed for mobile mics)
+  if (corr[maxIdx] / corr[0] < 0.2) return null;
 
   return freq;
 }
