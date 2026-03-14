@@ -718,8 +718,8 @@ body::before {
 
     <div class="section-label">TIME PER NOTE</div>
     <div class="time-slider-wrap">
-      <input type="range" id="timeSlider" class="time-slider" min="3" max="20" value="7" step="1" oninput="updateTimeLabel()">
-      <div class="time-label" id="timeLabel">7s</div>
+      <input type="range" id="timeSlider" class="time-slider" min="3" max="20" value="20" step="1" oninput="updateTimeLabel()">
+      <div class="time-label" id="timeLabel">20s</div>
     </div>
 
     <div class="mic-hint">Microphone access required for pitch detection</div>
@@ -938,7 +938,7 @@ function initAudio() {
   if (audioCtx.state === 'suspended') audioCtx.resume();
 }
 
-function playNote(midi, duration = 0.6) {
+function playNote(midi, duration = 2) {
   initAudio();
   const freq = midiToFreq(midi);
   const now = audioCtx.currentTime;
