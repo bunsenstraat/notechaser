@@ -679,6 +679,30 @@ body::before {
   padding: 4px;
 }
 
+/* Replay hint */
+.replay-hint {
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 6px 0 2px;
+  cursor: pointer;
+  transition: color 0.2s;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.replay-hint:hover, .replay-hint:active { color: var(--cyan); }
+.replay-hint kbd {
+  display: inline-block;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.65rem;
+  color: var(--cyan);
+}
+
 /* Responsive */
 @media (max-height: 700px) {
   .logo { font-size: 1.6rem; }
@@ -754,6 +778,8 @@ body::before {
         </div>
       </div>
     </div>
+
+    <div class="replay-hint" id="replayHint">Press <kbd>SPACE</kbd> or tap here to replay base note</div>
 
     <div class="piano-wrap">
       <div class="piano" id="piano"></div>
@@ -919,6 +945,18 @@ function buildPiano() {
   }
 }
 buildPiano();
+
+// ── REPLAY BASE NOTE ──
+function replayBaseNote() {
+  if (gameActive) playNote(currentBaseMidi, 0.6);
+}
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' && gameActive) {
+    e.preventDefault();
+    replayBaseNote();
+  }
+});
+document.getElementById('replayHint')?.addEventListener('click', replayBaseNote);
 
 function updatePianoHighlights(fromMidi, targetMidi, singingMidi) {
   document.querySelectorAll('.piano-key').forEach(k => {
