@@ -727,6 +727,12 @@ body::before {
     <div class="section-label">Intervals</div>
     <div class="interval-grid" id="intervalGrid"></div>
 
+    <div class="section-label">Mode</div>
+    <div class="direction-row">
+      <button class="dir-btn selected" data-mode="voice" onclick="setMode('voice')">&#127908; Voice</button>
+      <button class="dir-btn" data-mode="instrument" onclick="setMode('instrument')">&#127929; Instrument</button>
+    </div>
+
     <div class="section-label">Direction</div>
     <div class="direction-row">
       <button class="dir-btn selected" data-dir="up" onclick="toggleDir('up')">&#9650; Up</button>
@@ -862,6 +868,7 @@ const RANGE_ABS_HIGH = 64; // E4
 // ── STATE ──
 let selectedIntervals = new Set();
 let dirUp = true, dirDown = true;
+let gameMode = 'voice'; // 'voice' or 'instrument'
 let audioCtx = null;
 let analyser = null;
 let micStream = null;
@@ -898,6 +905,12 @@ INTERVALS.forEach((iv, i) => {
   });
   grid.appendChild(btn);
 });
+
+function setMode(m) {
+  gameMode = m;
+  document.querySelector('[data-mode="voice"]').classList.toggle('selected', m === 'voice');
+  document.querySelector('[data-mode="instrument"]').classList.toggle('selected', m === 'instrument');
+}
 
 function toggleDir(d) {
   if (d === 'up') dirUp = !dirUp;
@@ -949,7 +962,11 @@ buildPiano();
 
 // ── REPLAY BASE NOTE ──
 function replayBaseNote() {
-  if (gameActive) playNote(currentBaseMidi, 0.6);
+  if (!gameActive) return;
+  playNote(currentBaseMidi, 0.6);
+  if (gameMode === 'instrument') {
+    setTimeout(() => playNote(currentTargetMidi, 0.6), 500);
+  }
 }
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Space' && gameActive) {
@@ -1178,14 +1195,23 @@ function chooseNextChallenge() {
 
 function updateDisplay() {
   const dirLabel = currentDir > 0 ? 'Up' : 'Down';
-  document.getElementById('intervalDisplay').textContent = `${currentInterval.name} ${dirLabel}`;
-  document.getElementById('noteFrom').textContent = midiToName(currentBaseMidi);
-  document.getElementById('noteTarget').textContent = midiToName(currentTargetMidi);
-  document.getElementById('arrowDir').innerHTML = currentDir > 0 ? '&#9650;' : '&#9660;';
   document.getElementById('scoreDisplay').textContent = score;
   document.getElementById('hiScoreGame').textContent = `BEST: ${hiScore}`;
 
-  updatePianoHighlights(currentBaseMidi, currentTargetMidi, null);
+  if (gameMode === 'instrument') {
+    document.getElementById('intervalDisplay').textContent = 'Listen & Play';
+    document.getElementById('noteFrom').textContent = '?';
+    document.getElementById('noteTarget').textContent = '?';
+    document.getElementById('arrowDir').innerHTML = '&#127911;';
+    document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay both notes';
+    updatePianoHighlights(null, null, null);
+  } else {
+    document.getElementById('intervalDisplay').textContent = `${currentInterval.name} ${dirLabel}`;
+    document.getElementById('noteFrom').textContent = midiToName(currentBaseMidi);
+    document.getElementById('noteTarget').textContent = midiToName(currentTargetMidi);
+    document.getElementById('arrowDir').innerHTML = currentDir > 0 ? '&#9650;' : '&#9660;';
+    updatePianoHighlights(currentBaseMidi, currentTargetMidi, null);
+  }
 }
 
 function updateTimeLabel() {
@@ -1215,8 +1241,13 @@ async function startGame() {
   document.getElementById('holdProgress').style.width = '0%';
   document.getElementById('singingNote').innerHTML = '&nbsp;';
 
-  // Play the base note
-  setTimeout(() => playNote(currentBaseMidi), 300);
+  // Play notes
+  setTimeout(() => {
+    playNote(currentBaseMidi);
+    if (gameMode === 'instrument') {
+      setTimeout(() => playNote(currentTargetMidi), 500);
+    }
+  }, 300);
 
   gameActive = true;
   roundStart = performance.now();
@@ -1267,7 +1298,11 @@ function gameLoop() {
     }
 
     singingEl.innerHTML = `You: <span>${noteName}</span>`;
-    updatePianoHighlights(currentBaseMidi, currentTargetMidi, roundedMidi);
+    if (gameMode === 'instrument') {
+      updatePianoHighlights(null, null, roundedMidi);
+    } else {
+      updatePianoHighlights(currentBaseMidi, currentTargetMidi, roundedMidi);
+    }
 
     // Check if correct
     if (absCents < 50) {
@@ -1311,16 +1346,29 @@ function onSuccess() {
   dot.className = 'streak-dot';
   document.getElementById('streakDots').appendChild(dot);
 
+  // In instrument mode, briefly flash the correct interval before moving on
+  if (gameMode === 'instrument') {
+    const dirLabel = currentDir > 0 ? 'Up' : 'Down';
+    document.getElementById('intervalDisplay').textContent = `${currentInterval.name} ${dirLabel}`;
+    document.getElementById('noteFrom').textContent = midiToName(currentBaseMidi);
+    document.getElementById('noteTarget').textContent = midiToName(currentTargetMidi);
+  }
+
   // New base = old target
   currentBaseMidi = currentTargetMidi;
   holdStart = 0;
   document.getElementById('holdProgress').style.width = '0%';
 
   chooseNextChallenge();
-  updateDisplay();
 
-  // Play the new base note
-  setTimeout(() => playNote(currentBaseMidi), 200);
+  // Short delay so player can see the revealed interval in instrument mode
+  setTimeout(() => {
+    updateDisplay();
+    playNote(currentBaseMidi);
+    if (gameMode === 'instrument') {
+      setTimeout(() => playNote(currentTargetMidi), 500);
+    }
+  }, gameMode === 'instrument' ? 800 : 200);
 
   roundStart = performance.now();
   animFrame = requestAnimationFrame(gameLoop);
