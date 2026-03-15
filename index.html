@@ -1506,8 +1506,8 @@ function onSuccess() {
       melodyRound++;
       melodyIndex = 0;
 
-      // Add a note every 2 rounds (round 2, 4, 6...)
-      if (melodyRound % 2 === 0) {
+      // Add a note every 4 rounds (round 4, 8, 12...)
+      if (melodyRound % 4 === 0) {
         melodyLength++;
       }
 
