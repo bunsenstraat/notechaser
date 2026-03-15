@@ -169,6 +169,36 @@ body::before {
   box-shadow: var(--glow-cyan);
 }
 
+.mode-row {
+  display: flex;
+  gap: 8px;
+}
+
+.mode-btn {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 10px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.mode-btn:hover {
+  border-color: var(--cyan-dim);
+}
+
+.mode-btn.selected {
+  background: linear-gradient(135deg, rgba(0,240,255,0.1), rgba(255,0,170,0.06));
+  border-color: var(--cyan);
+  color: var(--text);
+}
+
 .direction-row {
   display: flex;
   gap: 8px;
@@ -728,9 +758,10 @@ body::before {
     <div class="interval-grid" id="intervalGrid"></div>
 
     <div class="section-label">Mode</div>
-    <div class="direction-row">
-      <button class="dir-btn selected" data-mode="voice" onclick="setMode('voice')">&#127908; Voice</button>
-      <button class="dir-btn" data-mode="instrument" onclick="setMode('instrument')">&#127929; Instrument</button>
+    <div class="mode-row">
+      <button class="mode-btn selected" data-mode="voice" onclick="setMode('voice')">&#127908; Voice</button>
+      <button class="mode-btn" data-mode="instrument" onclick="setMode('instrument')">&#127929; Instrument</button>
+      <button class="mode-btn" data-mode="melody" onclick="setMode('melody')">&#127926; Melody</button>
     </div>
 
     <div class="section-label">Direction</div>
@@ -820,7 +851,7 @@ body::before {
     <div class="go-title">GAME OVER</div>
     <div>
       <div class="go-score" id="goScore">0</div>
-      <div class="go-score-label">Intervals Nailed</div>
+      <div class="go-score-label" id="goScoreLabel">Intervals Nailed</div>
     </div>
     <div class="go-best" id="goBest">BEST: 0</div>
     <button class="retry-btn" onclick="retryGame()">Play Again</button>
@@ -868,7 +899,15 @@ const RANGE_ABS_HIGH = 64; // E4
 // ── STATE ──
 let selectedIntervals = new Set();
 let dirUp = true, dirDown = true;
-let gameMode = 'voice'; // 'voice' or 'instrument'
+let gameMode = 'voice'; // 'voice', 'instrument', or 'melody'
+
+// Melody mode state
+let melodyNotes = [];
+let melodyIndex = 0;
+let melodyLength = 2;
+let melodyRound = 0;
+let melodyPlaying = false;
+let hiScoreMelody = parseInt(localStorage.getItem('notechaser_hi_melody') || '0');
 let audioCtx = null;
 let analyser = null;
 let micStream = null;
@@ -908,8 +947,9 @@ INTERVALS.forEach((iv, i) => {
 
 function setMode(m) {
   gameMode = m;
-  document.querySelector('[data-mode="voice"]').classList.toggle('selected', m === 'voice');
-  document.querySelector('[data-mode="instrument"]').classList.toggle('selected', m === 'instrument');
+  document.querySelectorAll('.mode-btn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.mode === m);
+  });
 }
 
 function toggleDir(d) {
@@ -962,10 +1002,17 @@ buildPiano();
 
 // ── REPLAY BASE NOTE ──
 function replayBaseNote() {
-  if (!gameActive) return;
-  playNote(currentBaseMidi, 0.6);
-  if (gameMode === 'instrument') {
-    setTimeout(() => playNote(currentTargetMidi, 0.6), 500);
+  if (!gameActive || melodyPlaying) return;
+  if (gameMode === 'melody') {
+    playMelody(melodyNotes, () => {
+      updateDisplay();
+      roundStart = performance.now(); // reset timer after replay
+    });
+  } else {
+    playNote(currentBaseMidi, 0.6);
+    if (gameMode === 'instrument') {
+      setTimeout(() => playNote(currentTargetMidi, 0.6), 500);
+    }
   }
 }
 document.addEventListener('keydown', (e) => {
@@ -1155,6 +1202,62 @@ function detectPitch() {
   return freq;
 }
 
+// ── MELODY HELPERS ──
+function generateMelody(length) {
+  const intervals = [...selectedIntervals].map(i => INTERVALS[i]);
+  const dirs = [];
+  if (dirUp) dirs.push(1);
+  if (dirDown) dirs.push(-1);
+
+  const notes = [];
+  let note = Math.floor(Math.random() * (RANGE_HIGH - RANGE_LOW + 1)) + RANGE_LOW;
+  notes.push(note);
+
+  for (let n = 1; n < length; n++) {
+    let found = false;
+    for (let attempts = 0; attempts < 50; attempts++) {
+      const iv = intervals[Math.floor(Math.random() * intervals.length)];
+      let d = dirs[Math.floor(Math.random() * dirs.length)];
+      const target = note + d * iv.semitones;
+      // Bias direction to stay in range
+      if (target < RANGE_LOW && d === -1 && dirs.includes(1)) d = 1;
+      if (target > RANGE_HIGH && d === 1 && dirs.includes(-1)) d = -1;
+      const finalTarget = note + d * iv.semitones;
+      if (finalTarget >= RANGE_ABS_LOW && finalTarget <= RANGE_ABS_HIGH) {
+        note = finalTarget;
+        notes.push(note);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      // Fallback
+      const iv = intervals[0];
+      const d = note > 52 ? -1 : 1;
+      note = note + d * iv.semitones;
+      notes.push(note);
+    }
+  }
+  return notes;
+}
+
+function playMelody(notes, callback) {
+  melodyPlaying = true;
+  const spacing = 600; // ms between notes
+  notes.forEach((midi, i) => {
+    setTimeout(() => {
+      playNote(midi, 0.5);
+      // Highlight current note on piano during playback
+      updatePianoHighlights(null, midi, null);
+      document.getElementById('intervalDisplay').textContent = `Listen... ${i + 1}/${notes.length}`;
+    }, i * spacing);
+  });
+  setTimeout(() => {
+    melodyPlaying = false;
+    if (callback) callback();
+  }, notes.length * spacing);
+}
+
 // ── GAME LOGIC ──
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -1198,7 +1301,16 @@ function updateDisplay() {
   document.getElementById('scoreDisplay').textContent = score;
   document.getElementById('hiScoreGame').textContent = `BEST: ${hiScore}`;
 
-  if (gameMode === 'instrument') {
+  if (gameMode === 'melody') {
+    const hi = hiScoreMelody;
+    document.getElementById('hiScoreGame').textContent = `BEST: ${hi}`;
+    document.getElementById('intervalDisplay').textContent = `Note ${melodyIndex + 1} / ${melodyNotes.length}`;
+    document.getElementById('noteFrom').textContent = `Rd: ${melodyRound + 1}`;
+    document.getElementById('noteTarget').textContent = midiToName(melodyNotes[melodyIndex]);
+    document.getElementById('arrowDir').innerHTML = '&#127926;';
+    document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to hear melody again';
+    updatePianoHighlights(null, melodyNotes[melodyIndex], null);
+  } else if (gameMode === 'instrument') {
     document.getElementById('intervalDisplay').textContent = 'Listen & Play';
     document.getElementById('noteFrom').textContent = '?';
     document.getElementById('noteTarget').textContent = '?';
@@ -1210,6 +1322,7 @@ function updateDisplay() {
     document.getElementById('noteFrom').textContent = midiToName(currentBaseMidi);
     document.getElementById('noteTarget').textContent = midiToName(currentTargetMidi);
     document.getElementById('arrowDir').innerHTML = currentDir > 0 ? '&#9650;' : '&#9660;';
+    document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay base note';
     updatePianoHighlights(currentBaseMidi, currentTargetMidi, null);
   }
 }
@@ -1230,28 +1343,47 @@ async function startGame() {
 
   initAudio();
   score = 0;
-  currentBaseMidi = Math.floor(Math.random() * (RANGE_HIGH - RANGE_LOW + 1)) + RANGE_LOW;
   holdStart = 0;
-
-  chooseNextChallenge();
-  showScreen('game');
-  updateDisplay();
 
   document.getElementById('streakDots').innerHTML = '';
   document.getElementById('holdProgress').style.width = '0%';
   document.getElementById('singingNote').innerHTML = '&nbsp;';
 
-  // Play notes
-  setTimeout(() => {
-    playNote(currentBaseMidi);
-    if (gameMode === 'instrument') {
-      setTimeout(() => playNote(currentTargetMidi), 500);
-    }
-  }, 300);
+  showScreen('game');
 
-  gameActive = true;
-  roundStart = performance.now();
-  gameLoop();
+  if (gameMode === 'melody') {
+    melodyLength = 2;
+    melodyRound = 0;
+    melodyIndex = 0;
+    melodyNotes = generateMelody(melodyLength);
+    score = melodyLength;
+    updateDisplay();
+    // Play the melody, then start listening
+    setTimeout(() => {
+      playMelody(melodyNotes, () => {
+        updateDisplay();
+        gameActive = true;
+        roundStart = performance.now();
+        gameLoop();
+      });
+    }, 400);
+  } else {
+    currentBaseMidi = Math.floor(Math.random() * (RANGE_HIGH - RANGE_LOW + 1)) + RANGE_LOW;
+    chooseNextChallenge();
+    updateDisplay();
+
+    // Play notes
+    setTimeout(() => {
+      playNote(currentBaseMidi);
+      if (gameMode === 'instrument') {
+        setTimeout(() => playNote(currentTargetMidi), 500);
+      }
+    }, 300);
+
+    gameActive = true;
+    roundStart = performance.now();
+    gameLoop();
+  }
 }
 
 function gameLoop() {
@@ -1270,6 +1402,15 @@ function gameLoop() {
     return;
   }
 
+  // Don't detect pitch while melody is playing back
+  if (melodyPlaying) {
+    animFrame = requestAnimationFrame(gameLoop);
+    return;
+  }
+
+  // Determine target note based on mode
+  const targetMidi = (gameMode === 'melody') ? melodyNotes[melodyIndex] : currentTargetMidi;
+
   // Pitch detection
   const freq = detectPitch();
   const needle = document.getElementById('pitchNeedle');
@@ -1280,7 +1421,7 @@ function gameLoop() {
     const midi = freqToMidi(freq);
     const roundedMidi = Math.round(midi);
     const noteName = midiToName(roundedMidi);
-    const centsOff = (midi - currentTargetMidi) * 100; // cents from target
+    const centsOff = (midi - targetMidi) * 100; // cents from target
 
     // Update needle position (range: -200 to +200 cents mapped to 0-100%)
     const needlePos = 50 + (centsOff / 400) * 100;
@@ -1300,6 +1441,8 @@ function gameLoop() {
     singingEl.innerHTML = `You: <span>${noteName}</span>`;
     if (gameMode === 'instrument') {
       updatePianoHighlights(null, null, roundedMidi);
+    } else if (gameMode === 'melody') {
+      updatePianoHighlights(null, targetMidi, roundedMidi);
     } else {
       updatePianoHighlights(currentBaseMidi, currentTargetMidi, roundedMidi);
     }
@@ -1325,14 +1468,19 @@ function gameLoop() {
     singingEl.innerHTML = '&nbsp;';
     holdStart = 0;
     holdBar.style.width = '0%';
-    updatePianoHighlights(currentBaseMidi, currentTargetMidi, null);
+    if (gameMode === 'melody') {
+      updatePianoHighlights(null, targetMidi, null);
+    } else if (gameMode === 'instrument') {
+      updatePianoHighlights(null, null, null);
+    } else {
+      updatePianoHighlights(currentBaseMidi, currentTargetMidi, null);
+    }
   }
 
   animFrame = requestAnimationFrame(gameLoop);
 }
 
 function onSuccess() {
-  score++;
   playSuccessChime();
 
   // Flash
@@ -1340,6 +1488,56 @@ function onSuccess() {
   flash.classList.remove('show');
   void flash.offsetWidth;
   flash.classList.add('show');
+
+  holdStart = 0;
+  document.getElementById('holdProgress').style.width = '0%';
+
+  if (gameMode === 'melody') {
+    // Melody mode: advance to next note in sequence
+    melodyIndex++;
+
+    // Streak dot for each note
+    const dot = document.createElement('div');
+    dot.className = 'streak-dot';
+    document.getElementById('streakDots').appendChild(dot);
+
+    if (melodyIndex >= melodyNotes.length) {
+      // Round complete!
+      melodyRound++;
+      melodyIndex = 0;
+
+      // Add a note every 2 rounds (round 2, 4, 6...)
+      if (melodyRound % 2 === 0) {
+        melodyLength++;
+      }
+
+      score = melodyRound;
+      document.getElementById('scoreDisplay').textContent = score;
+
+      // Generate new melody at current length
+      melodyNotes = generateMelody(melodyLength);
+
+      document.getElementById('intervalDisplay').textContent = `✓ Round ${melodyRound}! Length: ${melodyLength}`;
+      document.getElementById('streakDots').innerHTML = '';
+
+      // Play the new melody after a brief pause
+      setTimeout(() => {
+        playMelody(melodyNotes, () => {
+          updateDisplay();
+          roundStart = performance.now();
+          animFrame = requestAnimationFrame(gameLoop);
+        });
+      }, 1000);
+    } else {
+      // Next note in the melody
+      updateDisplay();
+      roundStart = performance.now();
+      animFrame = requestAnimationFrame(gameLoop);
+    }
+    return;
+  }
+
+  score++;
 
   // Streak dot
   const dot = document.createElement('div');
@@ -1356,8 +1554,6 @@ function onSuccess() {
 
   // New base = old target
   currentBaseMidi = currentTargetMidi;
-  holdStart = 0;
-  document.getElementById('holdProgress').style.width = '0%';
 
   chooseNextChallenge();
 
@@ -1376,25 +1572,48 @@ function onSuccess() {
 
 function endGame() {
   gameActive = false;
+  melodyPlaying = false;
   if (animFrame) cancelAnimationFrame(animFrame);
   stopMic();
 
   playFailSound();
 
-  const isNewBest = score > hiScore;
-  if (isNewBest) {
-    hiScore = score;
-    localStorage.setItem('notechaser_hi', hiScore);
-  }
+  if (gameMode === 'melody') {
+    // Score in melody mode = max melody length reached minus starting length
+    const melodyScore = melodyRound;
+    const isNewBest = melodyScore > hiScoreMelody;
+    if (isNewBest) {
+      hiScoreMelody = melodyScore;
+      localStorage.setItem('notechaser_hi_melody', hiScoreMelody);
+    }
 
-  document.getElementById('goScore').textContent = score;
-  const bestEl = document.getElementById('goBest');
-  if (isNewBest && score > 0) {
-    bestEl.textContent = 'NEW BEST!';
-    bestEl.className = 'go-best go-new-best';
+    document.getElementById('goScore').textContent = melodyScore;
+    document.getElementById('goScoreLabel').textContent = `Rounds Survived (Max Length: ${melodyLength})`;
+    const bestEl = document.getElementById('goBest');
+    if (isNewBest && melodyScore > 0) {
+      bestEl.textContent = 'NEW BEST!';
+      bestEl.className = 'go-best go-new-best';
+    } else {
+      bestEl.textContent = `BEST: ${hiScoreMelody}`;
+      bestEl.className = 'go-best';
+    }
   } else {
-    bestEl.textContent = `BEST: ${hiScore}`;
-    bestEl.className = 'go-best';
+    const isNewBest = score > hiScore;
+    if (isNewBest) {
+      hiScore = score;
+      localStorage.setItem('notechaser_hi', hiScore);
+    }
+
+    document.getElementById('goScore').textContent = score;
+    document.getElementById('goScoreLabel').textContent = 'Intervals Nailed';
+    const bestEl = document.getElementById('goBest');
+    if (isNewBest && score > 0) {
+      bestEl.textContent = 'NEW BEST!';
+      bestEl.className = 'go-best go-new-best';
+    } else {
+      bestEl.textContent = `BEST: ${hiScore}`;
+      bestEl.className = 'go-best';
+    }
   }
 
   showScreen('gameover');
