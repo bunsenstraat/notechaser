@@ -1397,8 +1397,24 @@ function generateHarmonicMelody(length, rootMidi, scale) {
   if (uniqueTones.length === 0) return [rootMidi];
 
   const notes = [];
-  // Start on root or nearest tone
-  let currentIdx = uniqueTones.indexOf(rootMidi);
+  // Start on a random guide tone (1, 3, 5, 7, 9 of the scale)
+  const guideDegrees = [0, 2, 4, 6]; // scale degree indices: 1st, 3rd, 5th, 7th
+  // Add 9th (2nd degree up an octave concept, but just degree index 1)
+  if (scale.intervals.length > 1) guideDegrees.push(1);
+  // Pick a random guide tone and find it in our available tones
+  const degIdx = guideDegrees[Math.floor(Math.random() * guideDegrees.length)];
+  const guideInterval = scale.intervals[degIdx % scale.intervals.length];
+  // Find the closest matching tone to rootMidi + guideInterval
+  const guideTarget = rootMidi + guideInterval;
+  let currentIdx = uniqueTones.findIndex(t => t === guideTarget);
+  if (currentIdx === -1) {
+    // Find nearest available tone
+    let minDist = Infinity;
+    uniqueTones.forEach((t, i) => {
+      const d = Math.abs(t - guideTarget);
+      if (d < minDist) { minDist = d; currentIdx = i; }
+    });
+  }
   if (currentIdx === -1) currentIdx = Math.floor(uniqueTones.length / 2);
   notes.push(uniqueTones[currentIdx]);
 
