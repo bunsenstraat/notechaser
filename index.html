@@ -1353,6 +1353,25 @@ function detectPitch() {
 }
 
 // ── CHORD PLAYBACK ──
+function speak(text, callback) {
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.rate = 1;
+  utter.pitch = 1;
+  utter.volume = 0.8;
+  if (callback) utter.onend = callback;
+  speechSynthesis.speak(utter);
+  // Fallback in case onend doesn't fire (some browsers)
+  if (callback) {
+    const fallback = setTimeout(() => callback(), 3000);
+    utter.onend = () => { clearTimeout(fallback); callback(); };
+  }
+}
+
+function announceScale(rootMidi, scaleName, callback) {
+  const noteName = midiToName(rootMidi).replace('#', ' sharp').replace('b', ' flat');
+  speak(`${noteName} ${scaleName}`, callback);
+}
+
 function playChord(rootMidi, chordIntervals, callback) {
   initAudio();
   melodyPlaying = true;
@@ -1624,7 +1643,10 @@ async function startGame() {
 
     setTimeout(() => {
       if (gameMode === 'harmonic') {
-        playChord(harmonicRoot, SCALES[selectedScale].chord, startListening);
+        // Announce scale name, then play chord, then start
+        announceScale(harmonicRoot, SCALES[selectedScale].name, () => {
+          playChord(harmonicRoot, SCALES[selectedScale].chord, startListening);
+        });
       } else {
         startListening();
       }
@@ -1802,7 +1824,14 @@ function onSuccess() {
           });
         };
         if (gameMode === 'harmonic') {
-          playChord(harmonicRoot, SCALES[selectedScale].chord, startPlayback);
+          // Announce new key if it changed
+          if (melodyRound > 0 && melodyRound % 3 === 0) {
+            announceScale(harmonicRoot, SCALES[selectedScale].name, () => {
+              playChord(harmonicRoot, SCALES[selectedScale].chord, startPlayback);
+            });
+          } else {
+            playChord(harmonicRoot, SCALES[selectedScale].chord, startPlayback);
+          }
         } else {
           startPlayback();
         }
