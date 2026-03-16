@@ -169,6 +169,53 @@ body::before {
   box-shadow: var(--glow-cyan);
 }
 
+.scale-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.scale-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 10px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  line-height: 1.3;
+  user-select: none;
+}
+
+.scale-btn:hover {
+  border-color: var(--cyan-dim);
+  background: var(--surface2);
+}
+
+.scale-btn.selected {
+  background: linear-gradient(135deg, rgba(0,240,255,0.12), rgba(255,0,170,0.08));
+  border-color: var(--cyan);
+  color: var(--text);
+  box-shadow: var(--glow-cyan);
+}
+
+.scale-btn .chord-label {
+  display: block;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  margin-top: 2px;
+  opacity: 0.7;
+}
+
+.scale-btn.selected .chord-label {
+  color: var(--cyan);
+  opacity: 1;
+}
+
 .mode-row {
   display: flex;
   gap: 8px;
@@ -754,28 +801,38 @@ body::before {
 
   <!-- SETUP SCREEN -->
   <div id="setup" class="screen active">
-    <div class="section-label">Intervals</div>
-    <div class="interval-grid" id="intervalGrid"></div>
-
     <div class="section-label">Mode</div>
     <div class="mode-row">
       <button class="mode-btn selected" data-mode="voice" onclick="setMode('voice')">&#127908; Voice</button>
       <button class="mode-btn" data-mode="instrument" onclick="setMode('instrument')">&#127929; Instrument</button>
       <button class="mode-btn" data-mode="melody" onclick="setMode('melody')">&#127926; Melody</button>
+      <button class="mode-btn" data-mode="harmonic" onclick="setMode('harmonic')">&#127925; Harmonic</button>
     </div>
 
-    <div class="section-label">Direction</div>
-    <div class="direction-row">
-      <button class="dir-btn selected" data-dir="up" onclick="toggleDir('up')">&#9650; Up</button>
-      <button class="dir-btn selected" data-dir="down" onclick="toggleDir('down')">&#9660; Down</button>
+    <!-- Interval-based setup (voice/instrument/melody) -->
+    <div id="intervalSetup">
+      <div class="section-label">Intervals</div>
+      <div class="interval-grid" id="intervalGrid"></div>
+
+      <div class="section-label">Direction</div>
+      <div class="direction-row">
+        <button class="dir-btn selected" data-dir="up" onclick="toggleDir('up')">&#9650; Up</button>
+        <button class="dir-btn selected" data-dir="down" onclick="toggleDir('down')">&#9660; Down</button>
+      </div>
+
+      <div class="section-label">Presets</div>
+      <div class="preset-row">
+        <button class="preset-btn" onclick="preset('easy')">Easy</button>
+        <button class="preset-btn" onclick="preset('triads')">Triads</button>
+        <button class="preset-btn" onclick="preset('all')">All</button>
+        <button class="preset-btn" onclick="preset('none')">Clear</button>
+      </div>
     </div>
 
-    <div class="section-label">Presets</div>
-    <div class="preset-row">
-      <button class="preset-btn" onclick="preset('easy')">Easy</button>
-      <button class="preset-btn" onclick="preset('triads')">Triads</button>
-      <button class="preset-btn" onclick="preset('all')">All</button>
-      <button class="preset-btn" onclick="preset('none')">Clear</button>
+    <!-- Scale-based setup (harmonic mode) -->
+    <div id="scaleSetup" style="display:none">
+      <div class="section-label">Scale / Mode</div>
+      <div class="scale-grid" id="scaleGrid"></div>
     </div>
 
     <div class="section-label">TIME PER NOTE</div>
@@ -878,6 +935,26 @@ const INTERVALS = [
   { name: 'Octave',     semitones: 12, short: 'P8' },
 ];
 
+const SCALES = [
+  // Church Modes
+  { name: 'Ionian',       intervals: [0,2,4,5,7,9,11], chord: [0,4,7,11], chordName: 'Maj7', cat: 'church' },
+  { name: 'Dorian',       intervals: [0,2,3,5,7,9,10], chord: [0,3,7,10], chordName: 'm7', cat: 'church' },
+  { name: 'Phrygian',     intervals: [0,1,3,5,7,8,10], chord: [0,3,7,10], chordName: 'm7', cat: 'church' },
+  { name: 'Lydian',       intervals: [0,2,4,6,7,9,11], chord: [0,4,7,11], chordName: 'Maj7', cat: 'church' },
+  { name: 'Mixolydian',   intervals: [0,2,4,5,7,9,10], chord: [0,4,7,10], chordName: '7', cat: 'church' },
+  { name: 'Aeolian',      intervals: [0,2,3,5,7,8,10], chord: [0,3,7,10], chordName: 'm7', cat: 'church' },
+  { name: 'Locrian',      intervals: [0,1,3,5,6,8,10], chord: [0,3,6,10], chordName: 'm7♭5', cat: 'church' },
+  // Minor variants
+  { name: 'Melodic Min',  intervals: [0,2,3,5,7,9,11], chord: [0,3,7,11], chordName: 'mMaj7', cat: 'minor' },
+  { name: 'Harmonic Min', intervals: [0,2,3,5,7,8,11], chord: [0,3,7,11], chordName: 'mMaj7', cat: 'minor' },
+  // Bebop
+  { name: 'Maj Bebop',    intervals: [0,2,4,5,7,8,9,11], chord: [0,4,7,11], chordName: 'Maj7', cat: 'bebop' },
+  { name: 'Dom Bebop',    intervals: [0,2,4,5,7,9,10,11], chord: [0,4,7,10], chordName: '7', cat: 'bebop' },
+  // Blues
+  { name: 'Maj Blues',     intervals: [0,2,3,4,7,9],  chord: [0,4,7,10], chordName: '7', cat: 'blues' },
+  { name: 'Min Blues',     intervals: [0,3,5,6,7,10], chord: [0,3,7,10], chordName: 'm7', cat: 'blues' },
+];
+
 // MIDI note helpers: A4 = 69 = 440Hz
 function midiToFreq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
 function freqToMidi(freq) { return 69 + 12 * Math.log2(freq / 440); }
@@ -908,6 +985,11 @@ let melodyLength = 2;
 let melodyRound = 0;
 let melodyPlaying = false;
 let hiScoreMelody = parseInt(localStorage.getItem('notechaser_hi_melody') || '0');
+
+// Harmonic mode state
+let selectedScale = null;
+let harmonicRoot = null;
+let hiScoreHarmonic = parseInt(localStorage.getItem('notechaser_hi_harmonic') || '0');
 let audioCtx = null;
 let analyser = null;
 let micStream = null;
@@ -945,11 +1027,36 @@ INTERVALS.forEach((iv, i) => {
   grid.appendChild(btn);
 });
 
+// Build scale grid
+const scaleGrid = document.getElementById('scaleGrid');
+SCALES.forEach((scale, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'scale-btn';
+  btn.innerHTML = `${scale.name}<span class="chord-label">I${scale.chordName}</span>`;
+  btn.dataset.idx = i;
+  btn.addEventListener('click', () => {
+    // Single-select (radio behavior)
+    document.querySelectorAll('.scale-btn').forEach(b => b.classList.remove('selected'));
+    if (selectedScale === i) {
+      selectedScale = null;
+    } else {
+      selectedScale = i;
+      btn.classList.add('selected');
+    }
+    updateStartBtn();
+  });
+  scaleGrid.appendChild(btn);
+});
+
 function setMode(m) {
   gameMode = m;
   document.querySelectorAll('.mode-btn').forEach(b => {
     b.classList.toggle('selected', b.dataset.mode === m);
   });
+  const isHarmonic = (m === 'harmonic');
+  document.getElementById('intervalSetup').style.display = isHarmonic ? 'none' : '';
+  document.getElementById('scaleSetup').style.display = isHarmonic ? '' : 'none';
+  updateStartBtn();
 }
 
 function toggleDir(d) {
@@ -978,7 +1085,11 @@ function preset(p) {
 }
 
 function updateStartBtn() {
-  document.getElementById('startBtn').disabled = selectedIntervals.size === 0;
+  if (gameMode === 'harmonic') {
+    document.getElementById('startBtn').disabled = selectedScale === null;
+  } else {
+    document.getElementById('startBtn').disabled = selectedIntervals.size === 0;
+  }
 }
 
 // Default: easy
@@ -1003,10 +1114,17 @@ buildPiano();
 // ── REPLAY BASE NOTE ──
 function replayBaseNote() {
   if (!gameActive || melodyPlaying) return;
-  if (gameMode === 'melody') {
+  if (gameMode === 'harmonic') {
+    playChord(harmonicRoot, SCALES[selectedScale].chord, () => {
+      playMelody(melodyNotes, () => {
+        updateDisplay();
+        roundStart = performance.now();
+      });
+    });
+  } else if (gameMode === 'melody') {
     playMelody(melodyNotes, () => {
       updateDisplay();
-      roundStart = performance.now(); // reset timer after replay
+      roundStart = performance.now();
     });
   } else {
     playNote(currentBaseMidi, 0.6);
@@ -1202,6 +1320,73 @@ function detectPitch() {
   return freq;
 }
 
+// ── CHORD PLAYBACK ──
+function playChord(rootMidi, chordIntervals, callback) {
+  initAudio();
+  melodyPlaying = true;
+  const arpeggioSpacing = 250;
+  const holdDuration = 1.2;
+
+  // Arpeggio up
+  chordIntervals.forEach((semitones, i) => {
+    setTimeout(() => {
+      playNote(rootMidi + semitones, holdDuration);
+    }, i * arpeggioSpacing);
+  });
+
+  // Stack all notes after arpeggio
+  const stackTime = chordIntervals.length * arpeggioSpacing;
+  setTimeout(() => {
+    chordIntervals.forEach(semitones => {
+      playNote(rootMidi + semitones, 1.0);
+    });
+  }, stackTime);
+
+  const totalTime = stackTime + 1200;
+  setTimeout(() => {
+    melodyPlaying = false;
+    if (callback) callback();
+  }, totalTime);
+}
+
+// ── HARMONIC MELODY GENERATION ──
+function generateHarmonicMelody(length, rootMidi, scale) {
+  // Build all valid MIDI notes in this scale within singable range
+  const scaleTones = [];
+  for (let octaveOffset = -24; octaveOffset <= 24; octaveOffset += 12) {
+    for (const interval of scale.intervals) {
+      const midi = rootMidi + octaveOffset + interval;
+      if (midi >= RANGE_ABS_LOW && midi <= RANGE_ABS_HIGH) {
+        scaleTones.push(midi);
+      }
+    }
+  }
+  const uniqueTones = [...new Set(scaleTones)].sort((a, b) => a - b);
+  if (uniqueTones.length === 0) return [rootMidi];
+
+  const notes = [];
+  // Start on root or nearest tone
+  let currentIdx = uniqueTones.indexOf(rootMidi);
+  if (currentIdx === -1) currentIdx = Math.floor(uniqueTones.length / 2);
+  notes.push(uniqueTones[currentIdx]);
+
+  for (let n = 1; n < length; n++) {
+    // Move 1-3 scale steps, random direction (stepwise bias)
+    const maxStep = Math.min(3, Math.floor(uniqueTones.length / 2));
+    const step = Math.floor(Math.random() * maxStep) + 1;
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    let newIdx = currentIdx + dir * step;
+    newIdx = Math.max(0, Math.min(uniqueTones.length - 1, newIdx));
+    // Avoid repeating same note
+    if (newIdx === currentIdx && uniqueTones.length > 1) {
+      newIdx = currentIdx + (currentIdx > 0 ? -1 : 1);
+    }
+    currentIdx = newIdx;
+    notes.push(uniqueTones[currentIdx]);
+  }
+  return notes;
+}
+
 // ── MELODY HELPERS ──
 function generateMelody(length) {
   const intervals = [...selectedIntervals].map(i => INTERVALS[i]);
@@ -1243,10 +1428,10 @@ function generateMelody(length) {
 
 function playMelody(notes, callback) {
   melodyPlaying = true;
-  const spacing = 600; // ms between notes
+  const spacing = 1200; // ms between notes
   notes.forEach((midi, i) => {
     setTimeout(() => {
-      playNote(midi, 0.5);
+      playNote(midi, 1);
       // Highlight current note on piano during playback
       updatePianoHighlights(null, midi, null);
       document.getElementById('intervalDisplay').textContent = `Listen... ${i + 1}/${notes.length}`;
@@ -1301,14 +1486,20 @@ function updateDisplay() {
   document.getElementById('scoreDisplay').textContent = score;
   document.getElementById('hiScoreGame').textContent = `BEST: ${hiScore}`;
 
-  if (gameMode === 'melody') {
-    const hi = hiScoreMelody;
+  if (gameMode === 'melody' || gameMode === 'harmonic') {
+    const hi = gameMode === 'harmonic' ? hiScoreHarmonic : hiScoreMelody;
     document.getElementById('hiScoreGame').textContent = `BEST: ${hi}`;
-    document.getElementById('intervalDisplay').textContent = `Note ${melodyIndex + 1} / ${melodyNotes.length}`;
-    document.getElementById('noteFrom').textContent = `Rd: ${melodyRound + 1}`;
+    if (gameMode === 'harmonic') {
+      const scale = SCALES[selectedScale];
+      document.getElementById('intervalDisplay').textContent = `${scale.name} | Note ${melodyIndex + 1} / ${melodyNotes.length}`;
+      document.getElementById('noteFrom').textContent = `${midiToNoteLetter(harmonicRoot)} ${scale.chordName}`;
+    } else {
+      document.getElementById('intervalDisplay').textContent = `Note ${melodyIndex + 1} / ${melodyNotes.length}`;
+      document.getElementById('noteFrom').textContent = `Rd: ${melodyRound + 1}`;
+    }
     document.getElementById('noteTarget').textContent = midiToName(melodyNotes[melodyIndex]);
     document.getElementById('arrowDir').innerHTML = '&#127926;';
-    document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to hear melody again';
+    document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to hear ' + (gameMode === 'harmonic' ? 'chord + melody' : 'melody') + ' again';
     updatePianoHighlights(null, melodyNotes[melodyIndex], null);
   } else if (gameMode === 'instrument') {
     document.getElementById('intervalDisplay').textContent = 'Listen & Play';
@@ -1351,21 +1542,36 @@ async function startGame() {
 
   showScreen('game');
 
-  if (gameMode === 'melody') {
+  if (gameMode === 'melody' || gameMode === 'harmonic') {
     melodyLength = 2;
     melodyRound = 0;
     melodyIndex = 0;
-    melodyNotes = generateMelody(melodyLength);
-    score = melodyLength;
+
+    if (gameMode === 'harmonic') {
+      harmonicRoot = Math.floor(Math.random() * (RANGE_HIGH - RANGE_LOW + 1)) + RANGE_LOW;
+      melodyNotes = generateHarmonicMelody(melodyLength, harmonicRoot, SCALES[selectedScale]);
+    } else {
+      melodyNotes = generateMelody(melodyLength);
+    }
+
+    score = 0;
     updateDisplay();
-    // Play the melody, then start listening
-    setTimeout(() => {
+
+    const startListening = () => {
       playMelody(melodyNotes, () => {
         updateDisplay();
         gameActive = true;
         roundStart = performance.now();
         gameLoop();
       });
+    };
+
+    setTimeout(() => {
+      if (gameMode === 'harmonic') {
+        playChord(harmonicRoot, SCALES[selectedScale].chord, startListening);
+      } else {
+        startListening();
+      }
     }, 400);
   } else {
     currentBaseMidi = Math.floor(Math.random() * (RANGE_HIGH - RANGE_LOW + 1)) + RANGE_LOW;
@@ -1409,7 +1615,7 @@ function gameLoop() {
   }
 
   // Determine target note based on mode
-  const targetMidi = (gameMode === 'melody') ? melodyNotes[melodyIndex] : currentTargetMidi;
+  const targetMidi = (gameMode === 'melody' || gameMode === 'harmonic') ? melodyNotes[melodyIndex] : currentTargetMidi;
 
   // Pitch detection
   const freq = detectPitch();
@@ -1441,7 +1647,7 @@ function gameLoop() {
     singingEl.innerHTML = `You: <span>${noteName}</span>`;
     if (gameMode === 'instrument') {
       updatePianoHighlights(null, null, roundedMidi);
-    } else if (gameMode === 'melody') {
+    } else if (gameMode === 'melody' || gameMode === 'harmonic') {
       updatePianoHighlights(null, targetMidi, roundedMidi);
     } else {
       updatePianoHighlights(currentBaseMidi, currentTargetMidi, roundedMidi);
@@ -1468,7 +1674,7 @@ function gameLoop() {
     singingEl.innerHTML = '&nbsp;';
     holdStart = 0;
     holdBar.style.width = '0%';
-    if (gameMode === 'melody') {
+    if (gameMode === 'melody' || gameMode === 'harmonic') {
       updatePianoHighlights(null, targetMidi, null);
     } else if (gameMode === 'instrument') {
       updatePianoHighlights(null, null, null);
@@ -1492,8 +1698,8 @@ function onSuccess() {
   holdStart = 0;
   document.getElementById('holdProgress').style.width = '0%';
 
-  if (gameMode === 'melody') {
-    // Melody mode: advance to next note in sequence
+  if (gameMode === 'melody' || gameMode === 'harmonic') {
+    // Melody/Harmonic mode: advance to next note in sequence
     melodyIndex++;
 
     // Streak dot for each note
@@ -1506,27 +1712,43 @@ function onSuccess() {
       melodyRound++;
       melodyIndex = 0;
 
-      // Add a note every 4 rounds (round 4, 8, 12...)
-      if (melodyRound % 4 === 0) {
+      // Add a note every 2 rounds
+      if (melodyRound % 2 === 0) {
         melodyLength++;
       }
 
       score = melodyRound;
       document.getElementById('scoreDisplay').textContent = score;
 
-      // Generate new melody at current length
-      melodyNotes = generateMelody(melodyLength);
+      // Generate new melody
+      if (gameMode === 'harmonic') {
+        // New root every 3 rounds
+        if (melodyRound % 3 === 0) {
+          harmonicRoot = Math.floor(Math.random() * (RANGE_HIGH - RANGE_LOW + 1)) + RANGE_LOW;
+        }
+        melodyNotes = generateHarmonicMelody(melodyLength, harmonicRoot, SCALES[selectedScale]);
+      } else {
+        melodyNotes = generateMelody(melodyLength);
+      }
 
-      document.getElementById('intervalDisplay').textContent = `✓ Round ${melodyRound}! Length: ${melodyLength}`;
+      const scaleLabel = gameMode === 'harmonic' ? ` | ${SCALES[selectedScale].name}` : '';
+      document.getElementById('intervalDisplay').textContent = `✓ Round ${melodyRound}! Length: ${melodyLength}${scaleLabel}`;
       document.getElementById('streakDots').innerHTML = '';
 
-      // Play the new melody after a brief pause
+      // Play chord (harmonic) + melody after a brief pause
       setTimeout(() => {
-        playMelody(melodyNotes, () => {
-          updateDisplay();
-          roundStart = performance.now();
-          animFrame = requestAnimationFrame(gameLoop);
-        });
+        const startPlayback = () => {
+          playMelody(melodyNotes, () => {
+            updateDisplay();
+            roundStart = performance.now();
+            animFrame = requestAnimationFrame(gameLoop);
+          });
+        };
+        if (gameMode === 'harmonic') {
+          playChord(harmonicRoot, SCALES[selectedScale].chord, startPlayback);
+        } else {
+          startPlayback();
+        }
       }, 1000);
     } else {
       // Next note in the melody
@@ -1578,23 +1800,30 @@ function endGame() {
 
   playFailSound();
 
-  if (gameMode === 'melody') {
-    // Score in melody mode = max melody length reached minus starting length
+  if (gameMode === 'melody' || gameMode === 'harmonic') {
     const melodyScore = melodyRound;
-    const isNewBest = melodyScore > hiScoreMelody;
+    const isHarmonic = gameMode === 'harmonic';
+    const currentHi = isHarmonic ? hiScoreHarmonic : hiScoreMelody;
+    const isNewBest = melodyScore > currentHi;
     if (isNewBest) {
-      hiScoreMelody = melodyScore;
-      localStorage.setItem('notechaser_hi_melody', hiScoreMelody);
+      if (isHarmonic) {
+        hiScoreHarmonic = melodyScore;
+        localStorage.setItem('notechaser_hi_harmonic', hiScoreHarmonic);
+      } else {
+        hiScoreMelody = melodyScore;
+        localStorage.setItem('notechaser_hi_melody', hiScoreMelody);
+      }
     }
 
     document.getElementById('goScore').textContent = melodyScore;
-    document.getElementById('goScoreLabel').textContent = `Rounds Survived (Max Length: ${melodyLength})`;
+    const modeLabel = isHarmonic ? `${SCALES[selectedScale].name} | ` : '';
+    document.getElementById('goScoreLabel').textContent = `${modeLabel}Rounds Survived (Max Length: ${melodyLength})`;
     const bestEl = document.getElementById('goBest');
     if (isNewBest && melodyScore > 0) {
       bestEl.textContent = 'NEW BEST!';
       bestEl.className = 'go-best go-new-best';
     } else {
-      bestEl.textContent = `BEST: ${hiScoreMelody}`;
+      bestEl.textContent = `BEST: ${isHarmonic ? hiScoreHarmonic : hiScoreMelody}`;
       bestEl.className = 'go-best';
     }
   } else {
