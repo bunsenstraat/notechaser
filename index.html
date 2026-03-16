@@ -300,6 +300,11 @@ body::before {
   border-color: var(--magenta-dim);
   color: var(--text);
 }
+.speed-btn.active {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: var(--cyan-dim);
+}
 
 .time-slider-wrap {
   display: flex;
@@ -841,6 +846,14 @@ body::before {
       <div class="time-label" id="timeLabel">20s</div>
     </div>
 
+    <div class="section-label melody-only-setting" style="display:none">MELODY SPEED</div>
+    <div class="presets melody-only-setting" style="display:none" id="melodySpeedBtns">
+      <button class="preset-btn speed-btn" data-speed="4" onclick="setMelodySpeed(4)">CHILL</button>
+      <button class="preset-btn speed-btn active" data-speed="3" onclick="setMelodySpeed(3)">NORMAL</button>
+      <button class="preset-btn speed-btn" data-speed="2" onclick="setMelodySpeed(2)">FAST</button>
+      <button class="preset-btn speed-btn" data-speed="1" onclick="setMelodySpeed(1)">INSANE</button>
+    </div>
+
     <div class="mic-hint">Microphone access required for pitch detection</div>
     <button class="start-btn" id="startBtn" onclick="startGame()">Start</button>
   </div>
@@ -996,6 +1009,7 @@ let melodyNotes = [];
 let melodyIndex = 0;
 let melodyLength = 2;
 let melodyRound = 0;
+let melodySpeed = 3; // rounds before adding a note (4=chill, 3=normal, 2=fast, 1=insane)
 let melodyPlaying = false;
 let hiScoreMelody = parseInt(localStorage.getItem('notechaser_hi_melody') || '0');
 
@@ -1067,8 +1081,12 @@ function setMode(m) {
     b.classList.toggle('selected', b.dataset.mode === m);
   });
   const isHarmonic = (m === 'harmonic');
+  const isMelody = (m === 'melody' || m === 'harmonic');
   document.getElementById('intervalSetup').style.display = isHarmonic ? 'none' : '';
   document.getElementById('scaleSetup').style.display = isHarmonic ? '' : 'none';
+  document.querySelectorAll('.melody-only-setting').forEach(el => {
+    el.style.display = isMelody ? '' : 'none';
+  });
   updateStartBtn();
 }
 
@@ -1537,6 +1555,13 @@ function updateTimeLabel() {
   document.getElementById('timeLabel').textContent = v + 's';
 }
 
+function setMelodySpeed(speed) {
+  melodySpeed = speed;
+  document.querySelectorAll('.speed-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.speed) === speed);
+  });
+}
+
 async function startGame() {
   TIMEOUT = parseInt(document.getElementById('timeSlider').value) * 1000;
   try {
@@ -1728,8 +1753,8 @@ function onSuccess() {
       melodyRound++;
       melodyIndex = 0;
 
-      // Add a note every 2 rounds
-      if (melodyRound % 2 === 0) {
+      // Add a note based on speed setting (chill=4, normal=3, fast=2, insane=1)
+      if (melodyRound > 0 && melodyRound % melodySpeed === 0) {
         melodyLength++;
       }
 
