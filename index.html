@@ -815,6 +815,7 @@ body::before {
       <button class="mode-btn" data-mode="melody" onclick="setMode('melody')">&#127926; Melody</button>
       <button class="mode-btn" data-mode="harmonic" onclick="setMode('harmonic')">&#127925; Harmonic</button>
       <button class="mode-btn" data-mode="chord" onclick="setMode('chord')">&#127927; Chord</button>
+      <button class="mode-btn" data-mode="bass" onclick="setMode('bass')">&#127928; Bass</button>
     </div>
 
     <!-- Interval-based setup (voice/instrument/melody) -->
@@ -858,6 +859,24 @@ body::before {
       <div class="dir-row">
         <button class="dir-btn selected chord-play-btn" data-cplay="arpeggio" onclick="setChordPlayback('arpeggio')">&#127926; Arpeggio + Stack</button>
         <button class="dir-btn chord-play-btn" data-cplay="stack" onclick="setChordPlayback('stack')">&#127927; Stack Only</button>
+      </div>
+    </div>
+
+    <!-- Bass mode setup -->
+    <div id="bassSetup" style="display:none">
+      <div class="section-label">Cadences</div>
+      <div class="scale-grid" id="cadenceGrid"></div>
+      <div class="section-label" style="margin-top:12px">Presets</div>
+      <div class="preset-row">
+        <button class="preset-btn" onclick="cadencePreset('major')">Major</button>
+        <button class="preset-btn" onclick="cadencePreset('minor')">Minor</button>
+        <button class="preset-btn" onclick="cadencePreset('all')">All</button>
+        <button class="preset-btn" onclick="cadencePreset('none')">Clear</button>
+      </div>
+      <div class="section-label" style="margin-top:12px">Announce Key</div>
+      <div class="dir-row">
+        <button class="dir-btn selected bass-announce-btn" data-ann="on" onclick="toggleBassAnnounce(true)">&#128264; On</button>
+        <button class="dir-btn bass-announce-btn" data-ann="off" onclick="toggleBassAnnounce(false)">&#128263; Off (Hard)</button>
       </div>
     </div>
 
@@ -1011,6 +1030,69 @@ const CHORD_TYPES = [
   { name: 'Maj9',       short: 'Maj9',  intervals: [0,4,7,11,14], cat: 'ext' },
 ];
 
+// Jazz chord voicing qualities (Type A = 3rd on bottom, Type B = 7th on bottom)
+const VOICINGS = {
+  'm7':    { A: [3, 7, 10, 14],  B: [10, 14, 15, 19] },
+  '7':     { A: [4, 9, 10, 14],  B: [10, 14, 16, 21] },
+  'Maj7':  { A: [4, 7, 11, 14],  B: [11, 14, 16, 19] },
+  'm7b5':  { A: [3, 6, 10, 14],  B: [10, 14, 15, 18] },
+  '7alt':  { A: [4, 8, 10, 13],  B: [10, 13, 16, 20] },
+  'm6':    { A: [3, 7, 9, 14],   B: [9, 14, 15, 19] },
+  'IV7':   { A: [4, 7, 10, 14],  B: [10, 14, 16, 19] },
+};
+
+const CADENCES = [
+  {
+    name: 'ii-V-I', short: 'ii⁷→V⁷→I△', cat: 'major',
+    chords: [
+      { degRoot: 2,  name: 'ii-7',    quality: 'm7' },
+      { degRoot: 7,  name: 'V7',      quality: '7' },
+      { degRoot: 0,  name: 'IMaj7',   quality: 'Maj7' },
+    ]
+  },
+  {
+    name: 'Turnaround', short: 'I→vi⁷→ii⁷→V⁷', cat: 'major',
+    chords: [
+      { degRoot: 0,  name: 'IMaj7',   quality: 'Maj7' },
+      { degRoot: 9,  name: 'vi-7',    quality: 'm7' },
+      { degRoot: 2,  name: 'ii-7',    quality: 'm7' },
+      { degRoot: 7,  name: 'V7',      quality: '7' },
+    ]
+  },
+  {
+    name: 'Minor ii-V-i', short: 'iiø→V⁷alt→i⁶', cat: 'minor',
+    chords: [
+      { degRoot: 2,  name: 'iiø7',    quality: 'm7b5' },
+      { degRoot: 7,  name: 'V7alt',   quality: '7alt' },
+      { degRoot: 0,  name: 'i-6',     quality: 'm6' },
+    ]
+  },
+  {
+    name: 'Rhythm Bridge', short: 'I△→IV⁷→iii⁷→vi⁷', cat: 'major',
+    chords: [
+      { degRoot: 0,  name: 'IMaj7',   quality: 'Maj7' },
+      { degRoot: 5,  name: 'IV7',     quality: 'IV7' },
+      { degRoot: 4,  name: 'iii-7',   quality: 'm7' },
+      { degRoot: 9,  name: 'vi-7',    quality: 'm7' },
+    ]
+  },
+  {
+    name: 'ii-V', short: 'ii⁷→V⁷', cat: 'major',
+    chords: [
+      { degRoot: 2,  name: 'ii-7',    quality: 'm7' },
+      { degRoot: 7,  name: 'V7',      quality: '7' },
+    ]
+  },
+  {
+    name: 'Plagal', short: 'I△→IV△→I△', cat: 'major',
+    chords: [
+      { degRoot: 0,  name: 'IMaj7',   quality: 'Maj7' },
+      { degRoot: 5,  name: 'IVMaj7',  quality: 'Maj7' },
+      { degRoot: 0,  name: 'IMaj7',   quality: 'Maj7' },
+    ]
+  },
+];
+
 // MIDI note helpers: A4 = 69 = 440Hz
 function midiToFreq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
 function freqToMidi(freq) { return 69 + 12 * Math.log2(freq / 440); }
@@ -1036,11 +1118,11 @@ const INST_RANGE_ABS_LOW = 48;  // C3
 const INST_RANGE_ABS_HIGH = 72; // C5
 
 // Range helpers based on mode
-function isInstrumentMode() { return gameMode === 'instrument' || gameMode === 'harmonic' || gameMode === 'chord'; }
-function getRangeLow() { return isInstrumentMode() ? INST_RANGE_LOW : RANGE_LOW; }
-function getRangeHigh() { return isInstrumentMode() ? INST_RANGE_HIGH : RANGE_HIGH; }
-function getRangeAbsLow() { return isInstrumentMode() ? INST_RANGE_ABS_LOW : RANGE_ABS_LOW; }
-function getRangeAbsHigh() { return isInstrumentMode() ? INST_RANGE_ABS_HIGH : RANGE_ABS_HIGH; }
+function isInstrumentMode() { return gameMode === 'instrument' || gameMode === 'harmonic' || gameMode === 'chord' || gameMode === 'bass'; }
+function getRangeLow() { if (gameMode === 'bass') return 36; return isInstrumentMode() ? INST_RANGE_LOW : RANGE_LOW; }
+function getRangeHigh() { if (gameMode === 'bass') return 48; return isInstrumentMode() ? INST_RANGE_HIGH : RANGE_HIGH; }
+function getRangeAbsLow() { if (gameMode === 'bass') return 36; return isInstrumentMode() ? INST_RANGE_ABS_LOW : RANGE_ABS_LOW; }
+function getRangeAbsHigh() { if (gameMode === 'bass') return 72; return isInstrumentMode() ? INST_RANGE_ABS_HIGH : RANGE_ABS_HIGH; }
 
 // ── STATE ──
 let selectedIntervals = new Set();
@@ -1072,6 +1154,17 @@ let chordHitNotes = new Set();
 let holdingForMidi = null;
 let chordPlayback = 'arpeggio'; // 'arpeggio' or 'stack'
 let hiScoreChord = parseInt(localStorage.getItem('notechaser_hi_chord') || '0');
+
+// Bass mode state
+let selectedCadences = new Set();
+let bassKeyRoot = null;
+let currentCadence = null;
+let bassNotes = [];
+let bassIndex = 0;
+let bassCadenceChords = [];
+let bassUseTypeB = false;
+let bassAnnounceKey = true;
+let hiScoreBass = parseInt(localStorage.getItem('notechaser_hi_bass') || '0');
 
 let audioCtx = null;
 let analyser = null;
@@ -1165,6 +1258,47 @@ function chordPreset(p) {
   updateStartBtn();
 }
 
+// Build cadence grid
+const cadenceGrid = document.getElementById('cadenceGrid');
+CADENCES.forEach((cad, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'scale-btn cadence-btn';
+  btn.innerHTML = `${cad.name}<span class="chord-label">${cad.short}</span>`;
+  btn.dataset.idx = i;
+  btn.addEventListener('click', () => {
+    if (selectedCadences.has(i)) {
+      selectedCadences.delete(i);
+      btn.classList.remove('selected');
+    } else {
+      selectedCadences.add(i);
+      btn.classList.add('selected');
+    }
+    updateStartBtn();
+  });
+  cadenceGrid.appendChild(btn);
+});
+
+function cadencePreset(p) {
+  const btns = cadenceGrid.querySelectorAll('.cadence-btn');
+  selectedCadences.clear();
+  btns.forEach(b => b.classList.remove('selected'));
+  if (p === 'major') {
+    CADENCES.forEach((c, i) => { if (c.cat === 'major') { selectedCadences.add(i); btns[i].classList.add('selected'); } });
+  } else if (p === 'minor') {
+    CADENCES.forEach((c, i) => { if (c.cat === 'minor') { selectedCadences.add(i); btns[i].classList.add('selected'); } });
+  } else if (p === 'all') {
+    CADENCES.forEach((_, i) => { selectedCadences.add(i); btns[i].classList.add('selected'); });
+  }
+  updateStartBtn();
+}
+
+function toggleBassAnnounce(on) {
+  bassAnnounceKey = on;
+  document.querySelectorAll('.bass-announce-btn').forEach(b => {
+    b.classList.toggle('selected', (b.dataset.ann === 'on') === on);
+  });
+}
+
 function setMode(m) {
   gameMode = m;
   document.querySelectorAll('.mode-btn').forEach(b => {
@@ -1172,10 +1306,12 @@ function setMode(m) {
   });
   const isHarmonic = (m === 'harmonic');
   const isChord = (m === 'chord');
+  const isBass = (m === 'bass');
   const isMelody = (m === 'melody' || m === 'harmonic');
-  document.getElementById('intervalSetup').style.display = (isHarmonic || isChord) ? 'none' : '';
+  document.getElementById('intervalSetup').style.display = (isHarmonic || isChord || isBass) ? 'none' : '';
   document.getElementById('scaleSetup').style.display = isHarmonic ? '' : 'none';
   document.getElementById('chordSetup').style.display = isChord ? '' : 'none';
+  document.getElementById('bassSetup').style.display = isBass ? '' : 'none';
   document.querySelectorAll('.melody-only-setting').forEach(el => {
     el.style.display = isMelody ? '' : 'none';
   });
@@ -1212,6 +1348,8 @@ function updateStartBtn() {
     document.getElementById('startBtn').disabled = selectedScale === null;
   } else if (gameMode === 'chord') {
     document.getElementById('startBtn').disabled = selectedChords.size === 0;
+  } else if (gameMode === 'bass') {
+    document.getElementById('startBtn').disabled = selectedCadences.size === 0;
   } else {
     document.getElementById('startBtn').disabled = selectedIntervals.size === 0;
   }
@@ -1240,7 +1378,11 @@ buildPiano();
 // ── REPLAY BASE NOTE ──
 function replayBaseNote() {
   if (!gameActive || melodyPlaying) return;
-  if (gameMode === 'chord') {
+  if (gameMode === 'bass') {
+    playCadence(bassCadenceChords, () => {
+      roundStart = performance.now();
+    });
+  } else if (gameMode === 'chord') {
     playChordForMode(chordRoot, currentChordType.intervals, () => {
       roundStart = performance.now();
     });
@@ -1652,6 +1794,69 @@ function playChordConfirmBeep() {
   osc.stop(now + 0.15);
 }
 
+// ── BASS MODE HELPERS ──
+function pickBassKey() {
+  return Math.floor(Math.random() * 12);
+}
+
+function buildBassRound() {
+  bassUseTypeB = Math.random() < 0.5;
+  bassCadenceChords = [];
+  bassNotes = [];
+  bassIndex = 0;
+
+  currentCadence.chords.forEach(chord => {
+    const chordRootPC = (bassKeyRoot + chord.degRoot) % 12;
+
+    // Bass note in octave 2 (MIDI 36-47)
+    const bassNote = 36 + chordRootPC;
+    bassNotes.push(bassNote);
+
+    // Voicing: place around C4 area (MIDI 48+)
+    const voicing = VOICINGS[chord.quality];
+    const intervals = bassUseTypeB ? voicing.B : voicing.A;
+    const voicingBase = 48 + chordRootPC;
+    const voicingMidi = intervals.map(iv => voicingBase + iv);
+    bassCadenceChords.push(voicingMidi);
+  });
+}
+
+function playCadence(chordArrays, callback) {
+  melodyPlaying = true;
+  const chordDuration = 1.2;
+  const chordSpacing = 1500;
+
+  chordArrays.forEach((notes, i) => {
+    setTimeout(() => {
+      notes.forEach(midi => playNote(midi, chordDuration));
+    }, i * chordSpacing);
+  });
+
+  setTimeout(() => {
+    melodyPlaying = false;
+    if (callback) callback();
+  }, chordArrays.length * chordSpacing);
+}
+
+function announceBassKey(pitchClass, isMinor, callback) {
+  const name = NOTE_NAMES[pitchClass].replace('#', ' sharp').replace('b', ' flat');
+  const quality = isMinor ? 'minor' : 'major';
+  speak(`${name} ${quality}`, callback);
+}
+
+function updateBassPiano(singingMidi) {
+  document.querySelectorAll('.piano-key').forEach(k => {
+    k.classList.remove('active-from', 'active-target', 'active-singing');
+    const m = parseInt(k.dataset.midi);
+    // Green for already-hit bass notes
+    if (bassNotes.slice(0, bassIndex).includes(m)) k.classList.add('active-singing');
+    // Cyan for current target
+    if (bassIndex < bassNotes.length && m === bassNotes[bassIndex]) k.classList.add('active-target');
+    // Magenta for what user is currently playing
+    if (singingMidi !== null && m === singingMidi) k.classList.add('active-from');
+  });
+}
+
 // ── GAME LOGIC ──
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -1695,7 +1900,16 @@ function updateDisplay() {
   document.getElementById('scoreDisplay').textContent = score;
   document.getElementById('hiScoreGame').textContent = `BEST: ${hiScore}`;
 
-  if (gameMode === 'chord') {
+  if (gameMode === 'bass') {
+    document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreBass}`;
+    const chordName = currentCadence.chords[bassIndex] ? currentCadence.chords[bassIndex].name : '✓';
+    document.getElementById('intervalDisplay').textContent = `${currentCadence.name} — ${chordName} (${bassIndex + 1}/${bassNotes.length})`;
+    document.getElementById('noteFrom').textContent = `Key: ${NOTE_NAMES[bassKeyRoot]}`;
+    document.getElementById('noteTarget').textContent = bassIndex < bassNotes.length ? midiToName(bassNotes[bassIndex]) : '✓';
+    document.getElementById('arrowDir').innerHTML = '&#127928;';
+    document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay cadence';
+    updateBassPiano(null);
+  } else if (gameMode === 'chord') {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreChord}`;
     const remaining = chordTargetNotes.size;
     const total = currentChordType.intervals.length;
@@ -1792,7 +2006,33 @@ async function startGame() {
 
   showScreen('game');
 
-  if (gameMode === 'chord') {
+  if (gameMode === 'bass') {
+    bassKeyRoot = pickBassKey();
+    const indices = [...selectedCadences];
+    currentCadence = CADENCES[indices[Math.floor(Math.random() * indices.length)]];
+    score = 0;
+    buildPiano();
+    buildBassRound();
+    updateDisplay();
+
+    const startListening = () => {
+      playCadence(bassCadenceChords, () => {
+        updateDisplay();
+        gameActive = true;
+        roundStart = performance.now();
+        gameLoop();
+      });
+    };
+
+    setTimeout(() => {
+      if (bassAnnounceKey) {
+        const isMinor = currentCadence.cat === 'minor';
+        announceBassKey(bassKeyRoot, isMinor, startListening);
+      } else {
+        startListening();
+      }
+    }, 400);
+  } else if (gameMode === 'chord') {
     chordRoot = pickChordRoot();
     chordRoundsOnRoot = 0;
     score = 0;
@@ -1898,7 +2138,38 @@ function gameLoop() {
     const roundedMidi = Math.round(midi);
     const noteName = midiToName(roundedMidi);
 
-    if (gameMode === 'chord') {
+    if (gameMode === 'bass') {
+      // Bass mode: sequential note matching like melody
+      const targetMidi = bassNotes[bassIndex];
+      const centsOff = (midi - targetMidi) * 100;
+      const needlePos = 50 + (centsOff / 400) * 100;
+      needle.style.left = Math.max(2, Math.min(98, needlePos)) + '%';
+      const absCents = Math.abs(centsOff);
+      needle.className = absCents < 50 ? 'pitch-needle' : absCents < 100 ? 'pitch-needle close' : 'pitch-needle off-pitch';
+      singingEl.innerHTML = `You: <span>${noteName}</span>`;
+      updateBassPiano(roundedMidi);
+
+      if (absCents < 50) {
+        if (holdStart === 0) holdStart = now;
+        const held = now - holdStart;
+        holdBar.style.width = Math.min(100, (held / HOLD_REQUIRED) * 100) + '%';
+        if (held >= HOLD_REQUIRED) {
+          // Bass note confirmed
+          bassIndex++;
+          holdStart = 0;
+          holdBar.style.width = '0%';
+          playChordConfirmBeep();
+          updateDisplay();
+          if (bassIndex >= bassNotes.length) {
+            onSuccess();
+            return;
+          }
+        }
+      } else {
+        holdStart = 0;
+        holdBar.style.width = '0%';
+      }
+    } else if (gameMode === 'chord') {
       // Chord mode: match against any remaining target note
       let bestTarget = null;
       let bestCents = Infinity;
@@ -1984,7 +2255,9 @@ function gameLoop() {
     holdStart = 0;
     holdingForMidi = null;
     holdBar.style.width = '0%';
-    if (gameMode === 'chord') {
+    if (gameMode === 'bass') {
+      updateBassPiano(null);
+    } else if (gameMode === 'chord') {
       updateChordPiano(null);
     } else if (gameMode === 'melody' || gameMode === 'harmonic') {
       const targetMidi = melodyNotes[melodyIndex];
@@ -2011,6 +2284,42 @@ function onSuccess() {
   holdStart = 0;
   holdingForMidi = null;
   document.getElementById('holdProgress').style.width = '0%';
+
+  if (gameMode === 'bass') {
+    // Cadence complete!
+    cancelAnimationFrame(animFrame);
+    score++;
+    document.getElementById('scoreDisplay').textContent = score;
+
+    const dot = document.createElement('div');
+    dot.className = 'streak-dot';
+    document.getElementById('streakDots').appendChild(dot);
+
+    // New key + cadence
+    bassKeyRoot = pickBassKey();
+    const indices = [...selectedCadences];
+    currentCadence = CADENCES[indices[Math.floor(Math.random() * indices.length)]];
+    buildBassRound();
+    updateDisplay();
+
+    const playNext = () => {
+      playCadence(bassCadenceChords, () => {
+        updateDisplay();
+        roundStart = performance.now();
+        animFrame = requestAnimationFrame(gameLoop);
+      });
+    };
+
+    setTimeout(() => {
+      if (bassAnnounceKey) {
+        const isMinor = currentCadence.cat === 'minor';
+        announceBassKey(bassKeyRoot, isMinor, playNext);
+      } else {
+        playNext();
+      }
+    }, 800);
+    return;
+  }
 
   if (gameMode === 'chord') {
     // Chord complete!
@@ -2160,7 +2469,23 @@ function endGame() {
 
   playFailSound();
 
-  if (gameMode === 'chord') {
+  if (gameMode === 'bass') {
+    const isNewBest = score > hiScoreBass;
+    if (isNewBest) {
+      hiScoreBass = score;
+      localStorage.setItem('notechaser_hi_bass', hiScoreBass);
+    }
+    document.getElementById('goScore').textContent = score;
+    document.getElementById('goScoreLabel').textContent = 'Cadences Completed';
+    const bestEl = document.getElementById('goBest');
+    if (isNewBest && score > 0) {
+      bestEl.textContent = 'NEW BEST!';
+      bestEl.className = 'go-best go-new-best';
+    } else {
+      bestEl.textContent = `BEST: ${hiScoreBass}`;
+      bestEl.className = 'go-best';
+    }
+  } else if (gameMode === 'chord') {
     const isNewBest = score > hiScoreChord;
     if (isNewBest) {
       hiScoreChord = score;
