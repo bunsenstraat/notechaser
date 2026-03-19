@@ -868,6 +868,7 @@ body::before {
       <div class="dir-row">
         <button class="dir-btn selected chord-play-btn" data-cplay="arpeggio" onclick="setChordPlayback('arpeggio')">&#127926; Arpeggio + Stack</button>
         <button class="dir-btn chord-play-btn" data-cplay="stack" onclick="setChordPlayback('stack')">&#127927; Stack Only</button>
+        <button class="dir-btn chord-play-btn" data-cplay="sing" onclick="setChordPlayback('sing')">&#127908; Sing</button>
       </div>
     </div>
 
@@ -1127,11 +1128,12 @@ const INST_RANGE_ABS_LOW = 48;  // C3
 const INST_RANGE_ABS_HIGH = 72; // C5
 
 // Range helpers based on mode
-function isInstrumentMode() { return gameMode === 'instrument' || gameMode === 'harmonic' || gameMode === 'chord' || gameMode === 'bass'; }
-function getRangeLow() { if (gameMode === 'bass') return 36; return isInstrumentMode() ? INST_RANGE_LOW : RANGE_LOW; }
-function getRangeHigh() { if (gameMode === 'bass') return 48; return isInstrumentMode() ? INST_RANGE_HIGH : RANGE_HIGH; }
-function getRangeAbsLow() { if (gameMode === 'bass') return 36; return isInstrumentMode() ? INST_RANGE_ABS_LOW : RANGE_ABS_LOW; }
-function getRangeAbsHigh() { if (gameMode === 'bass') return 72; return isInstrumentMode() ? INST_RANGE_ABS_HIGH : RANGE_ABS_HIGH; }
+function isInstrumentMode() { return (gameMode === 'instrument' || gameMode === 'harmonic' || gameMode === 'chord' || gameMode === 'bass') && !(gameMode === 'chord' && chordPlayback === 'sing'); }
+function isChordSing() { return gameMode === 'chord' && chordPlayback === 'sing'; }
+function getRangeLow() { if (gameMode === 'bass') return 36; if (isChordSing()) return 45; return isInstrumentMode() ? INST_RANGE_LOW : RANGE_LOW; }
+function getRangeHigh() { if (gameMode === 'bass') return 48; if (isChordSing()) return 53; return isInstrumentMode() ? INST_RANGE_HIGH : RANGE_HIGH; }
+function getRangeAbsLow() { if (gameMode === 'bass') return 36; if (isChordSing()) return 45; return isInstrumentMode() ? INST_RANGE_ABS_LOW : RANGE_ABS_LOW; }
+function getRangeAbsHigh() { if (gameMode === 'bass') return 72; if (isChordSing()) return 63; return isInstrumentMode() ? INST_RANGE_ABS_HIGH : RANGE_ABS_HIGH; }
 
 // ── STATE ──
 let selectedIntervals = new Set();
@@ -1977,10 +1979,23 @@ function setChordPlayback(mode) {
   document.querySelectorAll('.chord-play-btn').forEach(b => {
     b.classList.toggle('selected', b.dataset.cplay === mode);
   });
+  if (gameMode === 'chord') buildPiano();
 }
 
 function playChordForMode(rootMidi, intervals, callback) {
-  if (chordPlayback === 'stack') {
+  if (chordPlayback === 'sing') {
+    // Sing mode — voice-announce chord name, play only the root
+    melodyPlaying = true;
+    const rootLabel = midiToName(rootMidi).replace('#', ' sharp').replace('b', ' flat');
+    const chordLabel = rootLabel + ' ' + currentChordType.name;
+    speak(chordLabel, () => {
+      playNote(rootMidi, 1.0);
+      setTimeout(() => {
+        melodyPlaying = false;
+        if (callback) callback();
+      }, 1200);
+    });
+  } else if (chordPlayback === 'stack') {
     // Stack only — play all notes simultaneously
     melodyPlaying = true;
     intervals.forEach(semitones => {
@@ -2050,14 +2065,19 @@ async function startGame() {
     updateDisplay();
 
     setTimeout(() => {
-      const rootName = midiToName(chordRoot).replace('#', ' sharp').replace('b', ' flat');
-      speak(rootName, () => {
+      const startPlayingChord = () => {
         playChordForMode(chordRoot, currentChordType.intervals, () => {
           gameActive = true;
           roundStart = performance.now();
           gameLoop();
         });
-      });
+      };
+      if (chordPlayback === 'sing') {
+        startPlayingChord(); // sing mode announces chord name itself
+      } else {
+        const rootName = midiToName(chordRoot).replace('#', ' sharp').replace('b', ' flat');
+        speak(rootName, startPlayingChord);
+      }
     }, 400);
   } else if (gameMode === 'melody' || gameMode === 'harmonic') {
     melodyLength = 2;
@@ -2359,7 +2379,7 @@ function onSuccess() {
     };
 
     setTimeout(() => {
-      if (rootChanged) {
+      if (rootChanged && chordPlayback !== 'sing') {
         const rootName = midiToName(chordRoot).replace('#', ' sharp').replace('b', ' flat');
         speak(rootName, playNext);
       } else {
