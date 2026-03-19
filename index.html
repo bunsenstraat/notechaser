@@ -767,16 +767,25 @@ body::before {
 /* Replay hint */
 .replay-hint {
   font-family: 'Chakra Petch', sans-serif;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   color: var(--text-dim);
   text-align: center;
-  padding: 6px 0 2px;
+  padding: 10px 16px;
   cursor: pointer;
-  transition: color 0.2s;
+  transition: all 0.2s;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  margin: 4px auto;
+  max-width: 320px;
 }
-.replay-hint:hover, .replay-hint:active { color: var(--cyan); }
+.replay-hint:hover, .replay-hint:active {
+  color: var(--cyan);
+  border-color: var(--cyan-dim);
+  background: var(--surface2);
+}
 .replay-hint kbd {
   display: inline-block;
   background: var(--surface2);
