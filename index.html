@@ -2174,9 +2174,14 @@ function gameLoop() {
     const noteName = midiToName(roundedMidi);
 
     if (gameMode === 'bass') {
-      // Bass mode: sequential note matching like melody
+      // Bass mode: match pitch class — accept any octave for singing
       const targetMidi = bassNotes[bassIndex];
-      const centsOff = (midi - targetMidi) * 100;
+      const targetPC = targetMidi % 12;
+      const sungPC = midi % 12;
+      let pcDiff = sungPC - targetPC;
+      if (pcDiff > 6) pcDiff -= 12;
+      if (pcDiff < -6) pcDiff += 12;
+      const centsOff = pcDiff * 100;
       const needlePos = 50 + (centsOff / 400) * 100;
       needle.style.left = Math.max(2, Math.min(98, needlePos)) + '%';
       const absCents = Math.abs(centsOff);
