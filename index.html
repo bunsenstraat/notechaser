@@ -2027,6 +2027,13 @@ async function startGame() {
   }
 
   initAudio();
+
+  // Warm up SpeechSynthesis on mobile (requires user gesture to unlock)
+  speechSynthesis.cancel();
+  const warmUp = new SpeechSynthesisUtterance('');
+  warmUp.volume = 0;
+  speechSynthesis.speak(warmUp);
+
   score = 0;
   holdStart = 0;
 
