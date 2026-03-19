@@ -1987,7 +1987,13 @@ function playChordForMode(rootMidi, intervals, callback) {
     // Sing mode — voice-announce chord name, play only the root
     melodyPlaying = true;
     const rootLabel = midiToName(rootMidi).replace('#', ' sharp').replace('b', ' flat');
-    const chordLabel = rootLabel + ' ' + currentChordType.name;
+    const speechMap = { 'Major':'Major', 'Minor':'Minor', 'Diminished':'Diminished', 'Augmented':'Augmented',
+      'Sus2':'Suspended 2', 'Sus4':'Suspended 4', 'Maj7':'Major 7', 'Dom7':'Dominant 7',
+      'Min7':'Minor 7', 'Min(Maj7)':'Minor Major 7', 'Dim7':'Diminished 7',
+      'Half-Dim7':'Half Diminished 7', 'Aug7':'Augmented 7', '9':'Dominant 9',
+      'min9':'Minor 9', 'Maj9':'Major 9' };
+    const spokenName = speechMap[currentChordType.name] || currentChordType.name;
+    const chordLabel = rootLabel + ' ' + spokenName;
     speak(chordLabel, () => {
       playNote(rootMidi, 1.0);
       setTimeout(() => {
