@@ -786,6 +786,15 @@ body::before {
   border-color: var(--cyan-dim);
   background: var(--surface2);
 }
+.answer-btn {
+  border-color: var(--magenta-dim, #553355);
+  color: var(--magenta, #ff66cc);
+}
+.answer-btn:hover, .answer-btn:active {
+  color: var(--magenta, #ff66cc);
+  border-color: var(--magenta, #ff66cc);
+  background: var(--surface2);
+}
 .replay-hint kbd {
   display: inline-block;
   background: var(--surface2);
@@ -938,6 +947,7 @@ body::before {
     </div>
 
     <div class="replay-hint" id="replayHint">Press <kbd>SPACE</kbd> or tap here to replay base note</div>
+    <div class="replay-hint answer-btn" id="answerBtn" style="display:none;" onclick="playAnswer()">🎹 Play Answer (hear the chord)</div>
 
     <div class="piano-wrap">
       <div class="piano" id="piano"></div>
@@ -1387,6 +1397,28 @@ function buildPiano() {
 buildPiano();
 
 // ── REPLAY BASE NOTE ──
+function playAnswer() {
+  if (!gameActive || melodyPlaying || !isChordSing()) return;
+  melodyPlaying = true;
+  // Play all chord tones as arpeggio so the user can hear each note
+  const notes = currentChordType.intervals.map(s => chordRoot + s);
+  let i = 0;
+  function playNext() {
+    if (i < notes.length) {
+      playNote(notes[i], 0.6);
+      i++;
+      setTimeout(playNext, 400);
+    } else {
+      // Then stack them together
+      setTimeout(() => {
+        notes.forEach(n => playNote(n, 1.2));
+        setTimeout(() => { melodyPlaying = false; }, 1400);
+      }, 300);
+    }
+  }
+  playNext();
+}
+
 function replayBaseNote() {
   if (!gameActive || melodyPlaying) return;
   if (gameMode === 'bass') {
@@ -1910,6 +1942,8 @@ function updateDisplay() {
   const dirLabel = currentDir > 0 ? 'Up' : 'Down';
   document.getElementById('scoreDisplay').textContent = score;
   document.getElementById('hiScoreGame').textContent = `BEST: ${hiScore}`;
+  // Hide answer button by default; chord mode will show it for sing
+  document.getElementById('answerBtn').style.display = 'none';
 
   if (gameMode === 'bass') {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreBass}`;
@@ -1929,6 +1963,7 @@ function updateDisplay() {
     document.getElementById('noteTarget').textContent = `${chordHitNotes.size}/${total}`;
     document.getElementById('arrowDir').innerHTML = '&#127927;';
     document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay chord';
+    document.getElementById('answerBtn').style.display = isChordSing() ? '' : 'none';
     updateChordPiano(null);
   } else if (gameMode === 'melody' || gameMode === 'harmonic') {
     const hi = gameMode === 'harmonic' ? hiScoreHarmonic : hiScoreMelody;
