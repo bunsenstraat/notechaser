@@ -834,6 +834,7 @@ body::before {
       <button class="mode-btn" data-mode="harmonic" onclick="setMode('harmonic')">&#127925; Harmonic</button>
       <button class="mode-btn" data-mode="chord" onclick="setMode('chord')">&#127927; Chord</button>
       <button class="mode-btn" data-mode="bass" onclick="setMode('bass')">&#127928; Bass</button>
+      <button class="mode-btn" data-mode="scale" onclick="setMode('scale')">&#127925; Scale</button>
     </div>
 
     <!-- Interval-based setup (voice/instrument/melody) -->
@@ -896,6 +897,25 @@ body::before {
       <div class="dir-row">
         <button class="dir-btn selected bass-announce-btn" data-ann="on" onclick="toggleBassAnnounce(true)">&#128264; On</button>
         <button class="dir-btn bass-announce-btn" data-ann="off" onclick="toggleBassAnnounce(false)">&#128263; Off (Hard)</button>
+      </div>
+    </div>
+
+    <!-- Scale sing setup -->
+    <div id="scaleSingSetup" style="display:none">
+      <div class="section-label">Scales to Practice</div>
+      <div class="scale-grid" id="scaleSingGrid"></div>
+      <div class="section-label" style="margin-top:12px">Presets</div>
+      <div class="preset-row">
+        <button class="preset-btn" onclick="scaleSingPreset('modes')">Modes</button>
+        <button class="preset-btn" onclick="scaleSingPreset('minor')">Minor</button>
+        <button class="preset-btn" onclick="scaleSingPreset('all')">All</button>
+        <button class="preset-btn" onclick="scaleSingPreset('none')">Clear</button>
+      </div>
+      <div class="section-label" style="margin-top:12px">Direction</div>
+      <div class="dir-row">
+        <button class="dir-btn selected scale-dir-btn" data-sdir="up" onclick="toggleScaleDir('up')">&#9650; Up</button>
+        <button class="dir-btn selected scale-dir-btn" data-sdir="down" onclick="toggleScaleDir('down')">&#9660; Down</button>
+        <button class="dir-btn scale-dir-btn" data-sdir="both" onclick="toggleScaleDir('both')">&#9650;&#9660; Up &amp; Down</button>
       </div>
     </div>
 
@@ -1187,6 +1207,15 @@ let bassUseTypeB = false;
 let bassAnnounceKey = true;
 let hiScoreBass = parseInt(localStorage.getItem('notechaser_hi_bass') || '0');
 
+// Scale sing mode state
+let selectedScalesForSing = new Set();
+let scaleNotes = [];
+let scaleNoteIndex = 0;
+let currentScaleForSing = null;
+let scaleRoot = null;
+let scaleDirUp = true, scaleDirDown = true, scaleDirBoth = false;
+let hiScoreScale = parseInt(localStorage.getItem('notechaser_hi_scale') || '0');
+
 let audioCtx = null;
 let analyser = null;
 let micStream = null;
@@ -1313,6 +1342,87 @@ function cadencePreset(p) {
   updateStartBtn();
 }
 
+// Build scale sing grid (multi-select)
+const scaleSingGrid = document.getElementById('scaleSingGrid');
+SCALES.forEach((scale, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'scale-btn scale-sing-btn';
+  btn.innerHTML = `${scale.name}<span class="chord-label">${scale.intervals.length} notes</span>`;
+  btn.dataset.idx = i;
+  btn.addEventListener('click', () => {
+    if (selectedScalesForSing.has(i)) {
+      selectedScalesForSing.delete(i);
+      btn.classList.remove('selected');
+    } else {
+      selectedScalesForSing.add(i);
+      btn.classList.add('selected');
+    }
+    updateStartBtn();
+  });
+  scaleSingGrid.appendChild(btn);
+});
+
+function scaleSingPreset(p) {
+  const btns = scaleSingGrid.querySelectorAll('.scale-sing-btn');
+  selectedScalesForSing.clear();
+  btns.forEach(b => b.classList.remove('selected'));
+  if (p === 'modes') {
+    SCALES.forEach((s, i) => { if (s.cat === 'mode') { selectedScalesForSing.add(i); btns[i].classList.add('selected'); } });
+  } else if (p === 'minor') {
+    SCALES.forEach((s, i) => { if (s.cat === 'minor') { selectedScalesForSing.add(i); btns[i].classList.add('selected'); } });
+  } else if (p === 'all') {
+    SCALES.forEach((_, i) => { selectedScalesForSing.add(i); btns[i].classList.add('selected'); });
+  }
+  updateStartBtn();
+}
+
+function toggleScaleDir(d) {
+  if (d === 'both') {
+    scaleDirBoth = !scaleDirBoth;
+    if (scaleDirBoth) { scaleDirUp = false; scaleDirDown = false; }
+    else { scaleDirUp = true; scaleDirDown = true; }
+  } else if (d === 'up') {
+    scaleDirUp = !scaleDirUp;
+    scaleDirBoth = false;
+    if (!scaleDirUp && !scaleDirDown) scaleDirDown = true;
+  } else {
+    scaleDirDown = !scaleDirDown;
+    scaleDirBoth = false;
+    if (!scaleDirUp && !scaleDirDown) scaleDirUp = true;
+  }
+  document.querySelectorAll('.scale-dir-btn').forEach(b => {
+    if (b.dataset.sdir === 'up') b.classList.toggle('selected', scaleDirUp);
+    if (b.dataset.sdir === 'down') b.classList.toggle('selected', scaleDirDown);
+    if (b.dataset.sdir === 'both') b.classList.toggle('selected', scaleDirBoth);
+  });
+}
+
+function buildScaleNotes(rootMidi, scale) {
+  // Build the scale notes within vocal range
+  let notes = [];
+  // ascending: root + each interval
+  const ascending = scale.intervals.map(s => rootMidi + s);
+  // add octave
+  ascending.push(rootMidi + 12);
+
+  if (scaleDirBoth) {
+    // Up then down (skip duplicate top note)
+    notes = [...ascending, ...ascending.slice(0, -1).reverse()];
+  } else if (scaleDirUp && scaleDirDown) {
+    // Random pick each round
+    if (Math.random() < 0.5) {
+      notes = [...ascending];
+    } else {
+      notes = [...ascending].reverse();
+    }
+  } else if (scaleDirDown) {
+    notes = [...ascending].reverse();
+  } else {
+    notes = [...ascending];
+  }
+  return notes;
+}
+
 function toggleBassAnnounce(on) {
   bassAnnounceKey = on;
   document.querySelectorAll('.bass-announce-btn').forEach(b => {
@@ -1328,11 +1438,13 @@ function setMode(m) {
   const isHarmonic = (m === 'harmonic');
   const isChord = (m === 'chord');
   const isBass = (m === 'bass');
+  const isScale = (m === 'scale');
   const isMelody = (m === 'melody' || m === 'harmonic');
-  document.getElementById('intervalSetup').style.display = (isHarmonic || isChord || isBass) ? 'none' : '';
+  document.getElementById('intervalSetup').style.display = (isHarmonic || isChord || isBass || isScale) ? 'none' : '';
   document.getElementById('scaleSetup').style.display = isHarmonic ? '' : 'none';
   document.getElementById('chordSetup').style.display = isChord ? '' : 'none';
   document.getElementById('bassSetup').style.display = isBass ? '' : 'none';
+  document.getElementById('scaleSingSetup').style.display = isScale ? '' : 'none';
   document.querySelectorAll('.melody-only-setting').forEach(el => {
     el.style.display = isMelody ? '' : 'none';
   });
@@ -1371,6 +1483,8 @@ function updateStartBtn() {
     document.getElementById('startBtn').disabled = selectedChords.size === 0;
   } else if (gameMode === 'bass') {
     document.getElementById('startBtn').disabled = selectedCadences.size === 0;
+  } else if (gameMode === 'scale') {
+    document.getElementById('startBtn').disabled = selectedScalesForSing.size === 0;
   } else {
     document.getElementById('startBtn').disabled = selectedIntervals.size === 0;
   }
@@ -1435,6 +1549,13 @@ function replayBaseNote() {
         updateDisplay();
         roundStart = performance.now();
       });
+    });
+  } else if (gameMode === 'scale') {
+    // Replay: announce scale name + play root
+    const scale = SCALES[currentScaleForSing];
+    announceScale(scaleRoot, scale.name, () => {
+      playNote(scaleRoot, 0.8);
+      setTimeout(() => { roundStart = performance.now(); }, 1000);
     });
   } else if (gameMode === 'melody') {
     playMelody(melodyNotes, () => {
@@ -1980,6 +2101,15 @@ function updateDisplay() {
     document.getElementById('arrowDir').innerHTML = '&#127926;';
     document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to hear ' + (gameMode === 'harmonic' ? 'chord + melody' : 'melody') + ' again';
     updatePianoHighlights(null, melodyNotes[melodyIndex], null);
+  } else if (gameMode === 'scale') {
+    document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreScale}`;
+    const scale = SCALES[currentScaleForSing];
+    document.getElementById('intervalDisplay').textContent = `${scale.name} — Note ${scaleNoteIndex + 1} / ${scaleNotes.length}`;
+    document.getElementById('noteFrom').textContent = `Root: ${midiToName(scaleRoot)}`;
+    document.getElementById('noteTarget').textContent = midiToName(scaleNotes[scaleNoteIndex]);
+    document.getElementById('arrowDir').innerHTML = '&#127925;';
+    document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to hear scale again';
+    updatePianoHighlights(null, scaleNotes[scaleNoteIndex], null);
   } else if (gameMode === 'instrument') {
     document.getElementById('intervalDisplay').textContent = 'Listen & Play';
     document.getElementById('noteFrom').textContent = '?';
@@ -2126,6 +2256,29 @@ async function startGame() {
         const rootName = midiToName(chordRoot).replace('#', ' sharp').replace('b', ' flat');
         speak(rootName, startPlayingChord);
       }
+    }, 400);
+  } else if (gameMode === 'scale') {
+    score = 0;
+    scaleNoteIndex = 0;
+    // Pick random scale from selection
+    const scaleIndices = [...selectedScalesForSing];
+    currentScaleForSing = scaleIndices[Math.floor(Math.random() * scaleIndices.length)];
+    const scale = SCALES[currentScaleForSing];
+    // Pick root within vocal range
+    scaleRoot = Math.floor(Math.random() * (getRangeHigh() - getRangeLow() + 1)) + getRangeLow();
+    scaleNotes = buildScaleNotes(scaleRoot, scale);
+    buildPiano();
+    updateDisplay();
+
+    setTimeout(() => {
+      announceScale(scaleRoot, scale.name, () => {
+        playNote(scaleRoot, 0.8);
+        setTimeout(() => {
+          gameActive = true;
+          roundStart = performance.now();
+          gameLoop();
+        }, 1000);
+      });
     }, 400);
   } else if (gameMode === 'melody' || gameMode === 'harmonic') {
     melodyLength = 2;
@@ -2293,7 +2446,7 @@ function gameLoop() {
       }
     } else {
       // All other modes: single target
-      const targetMidi = (gameMode === 'melody' || gameMode === 'harmonic') ? melodyNotes[melodyIndex] : currentTargetMidi;
+      const targetMidi = gameMode === 'scale' ? scaleNotes[scaleNoteIndex] : (gameMode === 'melody' || gameMode === 'harmonic') ? melodyNotes[melodyIndex] : currentTargetMidi;
       const centsOff = (midi - targetMidi) * 100;
       const needlePos = 50 + (centsOff / 400) * 100;
       const clampedPos = Math.max(2, Math.min(98, needlePos));
@@ -2311,7 +2464,7 @@ function gameLoop() {
       singingEl.innerHTML = `You: <span>${noteName}</span>`;
       if (gameMode === 'instrument') {
         updatePianoHighlights(null, null, roundedMidi);
-      } else if (gameMode === 'melody' || gameMode === 'harmonic') {
+      } else if (gameMode === 'scale' || gameMode === 'melody' || gameMode === 'harmonic') {
         updatePianoHighlights(null, targetMidi, roundedMidi);
       } else {
         updatePianoHighlights(currentBaseMidi, currentTargetMidi, roundedMidi);
@@ -2341,6 +2494,8 @@ function gameLoop() {
       updateBassPiano(null);
     } else if (gameMode === 'chord') {
       updateChordPiano(null);
+    } else if (gameMode === 'scale') {
+      updatePianoHighlights(null, scaleNotes[scaleNoteIndex], null);
     } else if (gameMode === 'melody' || gameMode === 'harmonic') {
       const targetMidi = melodyNotes[melodyIndex];
       updatePianoHighlights(null, targetMidi, null);
@@ -2439,6 +2594,51 @@ function onSuccess() {
         playNext();
       }
     }, 800);
+    return;
+  }
+
+  if (gameMode === 'scale') {
+    // Scale mode: advance to next note in scale
+    scaleNoteIndex++;
+
+    // Streak dot
+    const dot = document.createElement('div');
+    dot.className = 'streak-dot';
+    document.getElementById('streakDots').appendChild(dot);
+
+    if (scaleNoteIndex >= scaleNotes.length) {
+      // Scale complete!
+      cancelAnimationFrame(animFrame);
+      score++;
+      document.getElementById('scoreDisplay').textContent = score;
+      document.getElementById('streakDots').innerHTML = '';
+
+      // Pick next scale + root
+      const scaleIndices = [...selectedScalesForSing];
+      currentScaleForSing = scaleIndices[Math.floor(Math.random() * scaleIndices.length)];
+      const scale = SCALES[currentScaleForSing];
+      scaleRoot = Math.floor(Math.random() * (getRangeHigh() - getRangeLow() + 1)) + getRangeLow();
+      scaleNotes = buildScaleNotes(scaleRoot, scale);
+      scaleNoteIndex = 0;
+
+      document.getElementById('intervalDisplay').textContent = `✓ Scale ${score}!`;
+
+      setTimeout(() => {
+        announceScale(scaleRoot, scale.name, () => {
+          playNote(scaleRoot, 0.8);
+          setTimeout(() => {
+            updateDisplay();
+            roundStart = performance.now();
+            animFrame = requestAnimationFrame(gameLoop);
+          }, 1000);
+        });
+      }, 800);
+    } else {
+      // Next note in scale
+      updateDisplay();
+      roundStart = performance.now();
+      animFrame = requestAnimationFrame(gameLoop);
+    }
     return;
   }
 
@@ -2581,6 +2781,23 @@ function endGame() {
       bestEl.className = 'go-best go-new-best';
     } else {
       bestEl.textContent = `BEST: ${hiScoreChord}`;
+      bestEl.className = 'go-best';
+    }
+  } else if (gameMode === 'scale') {
+    const isNewBest = score > hiScoreScale;
+    if (isNewBest) {
+      hiScoreScale = score;
+      localStorage.setItem('notechaser_hi_scale', hiScoreScale);
+    }
+    document.getElementById('goScore').textContent = score;
+    const scaleName = SCALES[currentScaleForSing] ? SCALES[currentScaleForSing].name : 'Scale';
+    document.getElementById('goScoreLabel').textContent = `Scales Completed`;
+    const bestEl = document.getElementById('goBest');
+    if (isNewBest && score > 0) {
+      bestEl.textContent = 'NEW BEST!';
+      bestEl.className = 'go-best go-new-best';
+    } else {
+      bestEl.textContent = `BEST: ${hiScoreScale}`;
       bestEl.className = 'go-best';
     }
   } else if (gameMode === 'melody' || gameMode === 'harmonic') {
