@@ -86,7 +86,146 @@ body::before {
   text-align: center;
   padding: 16px 0 12px;
   flex-shrink: 0;
+  position: relative;
 }
+.settings-gear {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 1.4rem;
+  cursor: pointer;
+  padding: 6px 10px;
+  transition: all 0.2s;
+}
+.settings-gear:hover { color: var(--cyan); border-color: var(--cyan-dim); }
+
+/* Settings screen */
+.settings-screen {
+  display: none;
+  padding: 10px 16px 30px;
+}
+.settings-screen.active { display: block; }
+.settings-back {
+  font-family: 'Chakra Petch', sans-serif;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--cyan);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 8px 16px;
+  margin-bottom: 16px;
+  transition: all 0.2s;
+}
+.settings-back:hover { border-color: var(--cyan); background: var(--surface2); }
+.settings-title {
+  font-family: 'Orbitron', monospace;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--cyan);
+  margin-bottom: 20px;
+  letter-spacing: 3px;
+}
+.settings-group {
+  margin-bottom: 20px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.settings-group-title {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--magenta);
+  letter-spacing: 2px;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.setting-row:last-child { margin-bottom: 0; }
+.setting-label {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  flex: 1;
+}
+.setting-value {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.8rem;
+  color: var(--cyan);
+  min-width: 50px;
+  text-align: right;
+  margin-left: 8px;
+}
+.setting-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 140px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface2);
+  outline: none;
+  margin: 0 10px;
+}
+.setting-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--cyan);
+  cursor: pointer;
+  box-shadow: 0 0 8px var(--cyan-dim);
+}
+.setting-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--cyan);
+  cursor: pointer;
+  border: none;
+}
+.settings-save {
+  font-family: 'Chakra Petch', sans-serif;
+  width: 100%;
+  padding: 14px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  border: 2px solid var(--green);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--green);
+  cursor: pointer;
+  letter-spacing: 2px;
+  transition: all 0.2s;
+  margin-top: 10px;
+}
+.settings-save:hover { background: var(--green); color: var(--bg); }
+.settings-reset {
+  font-family: 'Chakra Petch', sans-serif;
+  width: 100%;
+  padding: 10px;
+  font-size: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+  margin-top: 8px;
+}
+.settings-reset:hover { border-color: var(--red); color: var(--red); }
 
 .logo {
   font-family: 'Orbitron', monospace;
@@ -822,6 +961,7 @@ body::before {
   <div class="header">
     <div class="logo">NoteChaser</div>
     <div class="logo-sub">Interval Training</div>
+    <button class="settings-gear" id="settingsGear" onclick="openSettings()">&#9881;</button>
   </div>
 
   <!-- SETUP SCREEN -->
@@ -935,6 +1075,95 @@ body::before {
 
     <div class="mic-hint">Microphone access required for pitch detection</div>
     <button class="start-btn" id="startBtn" onclick="startGame()">Start</button>
+  </div>
+
+  <!-- SETTINGS SCREEN -->
+  <div id="settings" class="settings-screen">
+    <button class="settings-back" onclick="closeSettings()">&#9664; Back</button>
+    <div class="settings-title">SETTINGS</div>
+
+    <div class="settings-group">
+      <div class="settings-group-title">Vocal Range</div>
+      <div class="setting-row">
+        <span class="setting-label">Low</span>
+        <input type="range" class="setting-slider" id="sVocalLow" min="36" max="60" value="48" oninput="updateSettingDisplay()">
+        <span class="setting-value" id="sVocalLowVal">C3</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">High</span>
+        <input type="range" class="setting-slider" id="sVocalHigh" min="48" max="84" value="64" oninput="updateSettingDisplay()">
+        <span class="setting-value" id="sVocalHighVal">E4</span>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group-title">Chord Sing Range</div>
+      <div class="setting-row">
+        <span class="setting-label">Low</span>
+        <input type="range" class="setting-slider" id="sChordSingLow" min="36" max="60" value="45" oninput="updateSettingDisplay()">
+        <span class="setting-value" id="sChordSingLowVal">A2</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">High</span>
+        <input type="range" class="setting-slider" id="sChordSingHigh" min="48" max="84" value="63" oninput="updateSettingDisplay()">
+        <span class="setting-value" id="sChordSingHighVal">Eb4</span>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group-title">Instrument Range</div>
+      <div class="setting-row">
+        <span class="setting-label">Low</span>
+        <input type="range" class="setting-slider" id="sInstLow" min="24" max="60" value="48" oninput="updateSettingDisplay()">
+        <span class="setting-value" id="sInstLowVal">C3</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">High</span>
+        <input type="range" class="setting-slider" id="sInstHigh" min="48" max="96" value="72" oninput="updateSettingDisplay()">
+        <span class="setting-value" id="sInstHighVal">C5</span>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group-title">Bass Range</div>
+      <div class="setting-row">
+        <span class="setting-label">Low</span>
+        <input type="range" class="setting-slider" id="sBassLow" min="24" max="48" value="36" oninput="updateSettingDisplay()">
+        <span class="setting-value" id="sBassLowVal">C2</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">High</span>
+        <input type="range" class="setting-slider" id="sBassHigh" min="48" max="84" value="72" oninput="updateSettingDisplay()">
+        <span class="setting-value" id="sBassHighVal">C5</span>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group-title">Tuner</div>
+      <div class="setting-row">
+        <span class="setting-label">Cents Tolerance</span>
+        <input type="range" class="setting-slider" id="sCents" min="20" max="100" value="50" step="5" oninput="updateSettingDisplay()">
+        <span class="setting-value" id="sCentsVal">50</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Hold Time (ms)</span>
+        <input type="range" class="setting-slider" id="sHold" min="200" max="1500" value="500" step="50" oninput="updateSettingDisplay()">
+        <span class="setting-value" id="sHoldVal">500</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Mic Sensitivity</span>
+        <input type="range" class="setting-slider" id="sSensitivity" min="1" max="20" value="5" step="1" oninput="updateSettingDisplay()">
+        <span class="setting-value" id="sSensitivityVal">5</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Confidence</span>
+        <input type="range" class="setting-slider" id="sConfidence" min="5" max="50" value="20" step="5" oninput="updateSettingDisplay()">
+        <span class="setting-value" id="sConfidenceVal">0.20</span>
+      </div>
+    </div>
+
+    <button class="settings-save" onclick="saveSettings()">SAVE</button>
+    <button class="settings-reset" onclick="resetSettings()">Reset to Defaults</button>
   </div>
 
   <!-- GAME SCREEN -->
@@ -1145,25 +1374,47 @@ function midiToNoteLetter(midi) {
   return NOTE_NAMES[((midi % 12) + 12) % 12];
 }
 
-// Male comfortable vocal range
-const RANGE_LOW = 48;   // C3
-const RANGE_HIGH = 57;  // A3
-const RANGE_ABS_LOW = 48;  // C3
-const RANGE_ABS_HIGH = 64; // E4
+// Default ranges
+const DEFAULTS = {
+  vocalLow: 48, vocalHigh: 64,       // C3 – E4
+  chordSingLow: 45, chordSingHigh: 63, // A2 – Eb4
+  instLow: 48, instHigh: 72,          // C3 – C5
+  bassLow: 36, bassHigh: 72,          // C2 – C5
+  cents: 50, holdMs: 500,
+  sensitivity: 5, confidence: 20,
+};
 
-// Instrument range (2 octaves)
-const INST_RANGE_LOW = 48;   // C3
-const INST_RANGE_HIGH = 60;  // C4 (comfortable starting range)
-const INST_RANGE_ABS_LOW = 48;  // C3
-const INST_RANGE_ABS_HIGH = 72; // C5
+// Mutable ranges (loaded from settings)
+let RANGE_LOW = 48;
+let RANGE_HIGH = 57;
+let RANGE_ABS_LOW = 48;
+let RANGE_ABS_HIGH = 64;
+
+let INST_RANGE_LOW = 48;
+let INST_RANGE_HIGH = 60;
+let INST_RANGE_ABS_LOW = 48;
+let INST_RANGE_ABS_HIGH = 72;
+
+// Chord sing range
+let CHORD_SING_LOW = 45;
+let CHORD_SING_HIGH = 63;
+
+// Bass range
+let BASS_RANGE_LOW = 36;
+let BASS_RANGE_HIGH = 72;
+
+// Tuner settings
+let CENTS_TOLERANCE = 50;
+let RMS_THRESHOLD = 0.005;
+let CONFIDENCE_THRESHOLD = 0.2;
 
 // Range helpers based on mode
 function isInstrumentMode() { return (gameMode === 'instrument' || gameMode === 'harmonic' || gameMode === 'chord' || gameMode === 'bass') && !(gameMode === 'chord' && chordPlayback === 'sing'); }
 function isChordSing() { return gameMode === 'chord' && chordPlayback === 'sing'; }
-function getRangeLow() { if (gameMode === 'bass') return 36; if (isChordSing()) return 45; return isInstrumentMode() ? INST_RANGE_LOW : RANGE_LOW; }
-function getRangeHigh() { if (gameMode === 'bass') return 48; if (isChordSing()) return 53; return isInstrumentMode() ? INST_RANGE_HIGH : RANGE_HIGH; }
-function getRangeAbsLow() { if (gameMode === 'bass') return 36; if (isChordSing()) return 45; return isInstrumentMode() ? INST_RANGE_ABS_LOW : RANGE_ABS_LOW; }
-function getRangeAbsHigh() { if (gameMode === 'bass') return 72; if (isChordSing()) return 63; return isInstrumentMode() ? INST_RANGE_ABS_HIGH : RANGE_ABS_HIGH; }
+function getRangeLow() { if (gameMode === 'bass') return BASS_RANGE_LOW; if (isChordSing()) return CHORD_SING_LOW; return isInstrumentMode() ? INST_RANGE_LOW : RANGE_LOW; }
+function getRangeHigh() { if (gameMode === 'bass') return BASS_RANGE_LOW + 12; if (isChordSing()) return CHORD_SING_LOW + 8; return isInstrumentMode() ? INST_RANGE_HIGH : RANGE_HIGH; }
+function getRangeAbsLow() { if (gameMode === 'bass') return BASS_RANGE_LOW; if (isChordSing()) return CHORD_SING_LOW; return isInstrumentMode() ? INST_RANGE_ABS_LOW : RANGE_ABS_LOW; }
+function getRangeAbsHigh() { if (gameMode === 'bass') return BASS_RANGE_HIGH; if (isChordSing()) return CHORD_SING_HIGH; return isInstrumentMode() ? INST_RANGE_ABS_HIGH : RANGE_ABS_HIGH; }
 
 // ── STATE ──
 let selectedIntervals = new Set();
@@ -1227,7 +1478,7 @@ let currentTargetMidi = 49;
 let currentInterval = null;
 let currentDir = 1;
 let holdStart = 0;
-const HOLD_REQUIRED = 500; // ms to hold correct pitch
+let HOLD_REQUIRED = 500; // ms to hold correct pitch
 let TIMEOUT = 7000; // ms before game over
 let roundStart = 0;
 let animFrame = null;
@@ -1709,7 +1960,7 @@ function detectPitch() {
   let rms = 0;
   for (let i = 0; i < pitchBuffer.length; i++) rms += pitchBuffer[i] * pitchBuffer[i];
   rms = Math.sqrt(rms / pitchBuffer.length);
-  if (rms < 0.005) return null;
+  if (rms < RMS_THRESHOLD) return null;
 
   // Autocorrelation
   const SIZE = pitchBuffer.length;
@@ -1751,7 +2002,7 @@ function detectPitch() {
   if (freq < 55 || freq > 600) return null;
 
   // Confidence check (relaxed for mobile mics)
-  if (corr[maxIdx] / corr[0] < 0.2) return null;
+  if (corr[maxIdx] / corr[0] < CONFIDENCE_THRESHOLD) return null;
 
   return freq;
 }
@@ -2024,6 +2275,8 @@ function updateBassPiano(singingMidi) {
 // ── GAME LOGIC ──
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('settings').classList.remove('active');
+  document.getElementById('settingsGear').style.display = id === 'setup' ? '' : 'none';
   document.getElementById(id).classList.add('active');
 }
 
@@ -2380,11 +2633,11 @@ function gameLoop() {
       const needlePos = 50 + (centsOff / 400) * 100;
       needle.style.left = Math.max(2, Math.min(98, needlePos)) + '%';
       const absCents = Math.abs(centsOff);
-      needle.className = absCents < 50 ? 'pitch-needle' : absCents < 100 ? 'pitch-needle close' : 'pitch-needle off-pitch';
+      needle.className = absCents < CENTS_TOLERANCE ? 'pitch-needle' : absCents < CENTS_TOLERANCE * 2 ? 'pitch-needle close' : 'pitch-needle off-pitch';
       singingEl.innerHTML = `You: <span>${noteName}</span>`;
       updateBassPiano(roundedMidi);
 
-      if (absCents < 50) {
+      if (absCents < CENTS_TOLERANCE) {
         if (holdStart === 0) holdStart = now;
         const held = now - holdStart;
         holdBar.style.width = Math.min(100, (held / HOLD_REQUIRED) * 100) + '%';
@@ -2417,11 +2670,11 @@ function gameLoop() {
       const needlePos = 50 + (centsOff / 400) * 100;
       needle.style.left = Math.max(2, Math.min(98, needlePos)) + '%';
       const absCents = Math.abs(centsOff);
-      needle.className = absCents < 50 ? 'pitch-needle' : absCents < 100 ? 'pitch-needle close' : 'pitch-needle off-pitch';
+      needle.className = absCents < CENTS_TOLERANCE ? 'pitch-needle' : absCents < CENTS_TOLERANCE * 2 ? 'pitch-needle close' : 'pitch-needle off-pitch';
       singingEl.innerHTML = `You: <span>${noteName}</span>`;
       updateChordPiano(roundedMidi);
 
-      if (absCents < 50 && bestTarget !== null) {
+      if (absCents < CENTS_TOLERANCE && bestTarget !== null) {
         if (holdingForMidi !== bestTarget) { holdStart = now; holdingForMidi = bestTarget; }
         const held = now - holdStart;
         holdBar.style.width = Math.min(100, (held / HOLD_REQUIRED) * 100) + '%';
@@ -2453,9 +2706,9 @@ function gameLoop() {
       needle.style.left = clampedPos + '%';
 
       const absCents = Math.abs(centsOff);
-      if (absCents < 50) {
+      if (absCents < CENTS_TOLERANCE) {
         needle.className = 'pitch-needle';
-      } else if (absCents < 100) {
+      } else if (absCents < CENTS_TOLERANCE * 2) {
         needle.className = 'pitch-needle close';
       } else {
         needle.className = 'pitch-needle off-pitch';
@@ -2470,7 +2723,7 @@ function gameLoop() {
         updatePianoHighlights(currentBaseMidi, currentTargetMidi, roundedMidi);
       }
 
-      if (absCents < 50) {
+      if (absCents < CENTS_TOLERANCE) {
         if (holdStart === 0) holdStart = now;
         const held = now - holdStart;
         holdBar.style.width = Math.min(100, (held / HOLD_REQUIRED) * 100) + '%';
@@ -2855,6 +3108,109 @@ function retryGame() {
 function backToSetup() {
   showScreen('setup');
 }
+
+// ── SETTINGS ──
+function openSettings() {
+  document.getElementById('setup').classList.remove('active');
+  document.getElementById('settings').classList.add('active');
+  document.getElementById('settingsGear').style.display = 'none';
+  loadSettingsUI();
+}
+
+function closeSettings() {
+  document.getElementById('settings').classList.remove('active');
+  document.getElementById('setup').classList.add('active');
+  document.getElementById('settingsGear').style.display = '';
+}
+
+function loadSettingsUI() {
+  const s = JSON.parse(localStorage.getItem('notechaser_settings') || 'null') || DEFAULTS;
+  document.getElementById('sVocalLow').value = s.vocalLow;
+  document.getElementById('sVocalHigh').value = s.vocalHigh;
+  document.getElementById('sChordSingLow').value = s.chordSingLow;
+  document.getElementById('sChordSingHigh').value = s.chordSingHigh;
+  document.getElementById('sInstLow').value = s.instLow;
+  document.getElementById('sInstHigh').value = s.instHigh;
+  document.getElementById('sBassLow').value = s.bassLow;
+  document.getElementById('sBassHigh').value = s.bassHigh;
+  document.getElementById('sCents').value = s.cents;
+  document.getElementById('sHold').value = s.holdMs;
+  document.getElementById('sSensitivity').value = s.sensitivity;
+  document.getElementById('sConfidence').value = s.confidence;
+  updateSettingDisplay();
+}
+
+function updateSettingDisplay() {
+  document.getElementById('sVocalLowVal').textContent = midiToName(+document.getElementById('sVocalLow').value);
+  document.getElementById('sVocalHighVal').textContent = midiToName(+document.getElementById('sVocalHigh').value);
+  document.getElementById('sChordSingLowVal').textContent = midiToName(+document.getElementById('sChordSingLow').value);
+  document.getElementById('sChordSingHighVal').textContent = midiToName(+document.getElementById('sChordSingHigh').value);
+  document.getElementById('sInstLowVal').textContent = midiToName(+document.getElementById('sInstLow').value);
+  document.getElementById('sInstHighVal').textContent = midiToName(+document.getElementById('sInstHigh').value);
+  document.getElementById('sBassLowVal').textContent = midiToName(+document.getElementById('sBassLow').value);
+  document.getElementById('sBassHighVal').textContent = midiToName(+document.getElementById('sBassHigh').value);
+  document.getElementById('sCentsVal').textContent = document.getElementById('sCents').value;
+  document.getElementById('sHoldVal').textContent = document.getElementById('sHold').value;
+  const sens = +document.getElementById('sSensitivity').value;
+  document.getElementById('sSensitivityVal').textContent = sens;
+  const conf = +document.getElementById('sConfidence').value;
+  document.getElementById('sConfidenceVal').textContent = (conf / 100).toFixed(2);
+}
+
+function applySettings(s) {
+  RANGE_LOW = s.vocalLow;
+  RANGE_HIGH = Math.min(s.vocalLow + 9, s.vocalHigh); // starting range within vocal
+  RANGE_ABS_LOW = s.vocalLow;
+  RANGE_ABS_HIGH = s.vocalHigh;
+
+  INST_RANGE_LOW = s.instLow;
+  INST_RANGE_HIGH = Math.min(s.instLow + 12, s.instHigh);
+  INST_RANGE_ABS_LOW = s.instLow;
+  INST_RANGE_ABS_HIGH = s.instHigh;
+
+  CHORD_SING_LOW = s.chordSingLow;
+  CHORD_SING_HIGH = s.chordSingHigh;
+
+  BASS_RANGE_LOW = s.bassLow;
+  BASS_RANGE_HIGH = s.bassHigh;
+
+  CENTS_TOLERANCE = s.cents;
+  HOLD_REQUIRED = s.holdMs;
+  RMS_THRESHOLD = s.sensitivity / 1000; // 1-20 → 0.001-0.020
+  CONFIDENCE_THRESHOLD = s.confidence / 100; // 5-50 → 0.05-0.50
+}
+
+function saveSettings() {
+  const s = {
+    vocalLow: +document.getElementById('sVocalLow').value,
+    vocalHigh: +document.getElementById('sVocalHigh').value,
+    chordSingLow: +document.getElementById('sChordSingLow').value,
+    chordSingHigh: +document.getElementById('sChordSingHigh').value,
+    instLow: +document.getElementById('sInstLow').value,
+    instHigh: +document.getElementById('sInstHigh').value,
+    bassLow: +document.getElementById('sBassLow').value,
+    bassHigh: +document.getElementById('sBassHigh').value,
+    cents: +document.getElementById('sCents').value,
+    holdMs: +document.getElementById('sHold').value,
+    sensitivity: +document.getElementById('sSensitivity').value,
+    confidence: +document.getElementById('sConfidence').value,
+  };
+  localStorage.setItem('notechaser_settings', JSON.stringify(s));
+  applySettings(s);
+  closeSettings();
+}
+
+function resetSettings() {
+  localStorage.removeItem('notechaser_settings');
+  applySettings(DEFAULTS);
+  loadSettingsUI();
+}
+
+// Load saved settings on startup
+(function() {
+  const saved = JSON.parse(localStorage.getItem('notechaser_settings') || 'null');
+  if (saved) applySettings(saved);
+})();
 
 // Prevent start with nothing selected
 updateStartBtn();
