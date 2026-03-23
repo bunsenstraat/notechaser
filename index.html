@@ -1475,6 +1475,7 @@ let scaleNoteIndex = 0;
 let currentScaleForSing = null;
 let scaleRoot = null;
 let scaleDirUp = true, scaleDirDown = true, scaleDirBoth = false;
+let scaleCurrentDir = 'up'; // tracks actual direction for voice announcement
 let hiScoreScale = parseInt(localStorage.getItem('notechaser_hi_scale') || '0');
 
 let audioCtx = null;
@@ -1671,17 +1672,22 @@ function buildScaleNotes(rootMidi, scale) {
   if (scaleDirBoth) {
     // Up then down (skip duplicate top note)
     notes = [...ascending, ...ascending.slice(0, -1).reverse()];
+    scaleCurrentDir = 'up and down';
   } else if (scaleDirUp && scaleDirDown) {
     // Random pick each round
     if (Math.random() < 0.5) {
       notes = [...ascending];
+      scaleCurrentDir = 'up';
     } else {
       notes = [...ascending].reverse();
+      scaleCurrentDir = 'down';
     }
   } else if (scaleDirDown) {
     notes = [...ascending].reverse();
+    scaleCurrentDir = 'down';
   } else {
     notes = [...ascending];
+    scaleCurrentDir = 'up';
   }
   return notes;
 }
@@ -2036,7 +2042,7 @@ function speak(text, callback) {
 
 function announceScale(rootMidi, scaleName, callback) {
   const noteName = midiToName(rootMidi).replace('#', ' sharp').replace('b', ' flat');
-  speak(`${noteName} ${scaleName}`, callback);
+  speak(`${noteName} ${scaleName}, ${scaleCurrentDir}`, callback);
 }
 
 function playChord(rootMidi, chordIntervals, callback) {
@@ -2369,7 +2375,8 @@ function updateDisplay() {
   } else if (gameMode === 'scale') {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreScale}`;
     const scale = SCALES[currentScaleForSing];
-    document.getElementById('intervalDisplay').textContent = `${scale.name} — Note ${scaleNoteIndex + 1} / ${scaleNotes.length}`;
+    const dirArrow = scaleCurrentDir === 'down' ? '↓' : scaleCurrentDir === 'up and down' ? '↕' : '↑';
+    document.getElementById('intervalDisplay').textContent = `${scale.name} ${dirArrow} — Note ${scaleNoteIndex + 1} / ${scaleNotes.length}`;
     document.getElementById('noteFrom').textContent = `Root: ${midiToName(scaleRoot)}`;
     document.getElementById('noteTarget').textContent = midiToName(scaleNotes[scaleNoteIndex]);
     document.getElementById('arrowDir').innerHTML = '&#127925;';
