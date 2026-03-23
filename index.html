@@ -1048,6 +1048,7 @@ body::before {
       <div class="preset-row">
         <button class="preset-btn" onclick="scaleSingPreset('modes')">Modes</button>
         <button class="preset-btn" onclick="scaleSingPreset('minor')">Minor</button>
+        <button class="preset-btn" onclick="scaleSingPreset('jazz')">Jazz</button>
         <button class="preset-btn" onclick="scaleSingPreset('all')">All</button>
         <button class="preset-btn" onclick="scaleSingPreset('none')">Clear</button>
       </div>
@@ -1275,6 +1276,15 @@ const SCALES = [
   // Blues
   { name: 'Maj Blues',     intervals: [0,2,3,4,7,9],  chord: [0,4,7,10], chordName: '7', cat: 'blues' },
   { name: 'Min Blues',     intervals: [0,3,5,6,7,10], chord: [0,3,7,10], chordName: 'm7', cat: 'blues' },
+  // Jazz
+  { name: 'Altered',       intervals: [0,1,3,4,6,8,10], chord: [0,4,8,10], chordName: '7alt', cat: 'jazz' },
+  { name: 'Mixo ♭9♭13',   intervals: [0,1,4,5,7,8,10], chord: [0,4,7,10], chordName: '7', cat: 'jazz' },
+  { name: 'Whole Tone',    intervals: [0,2,4,6,8,10],   chord: [0,4,8,10], chordName: 'aug7', cat: 'jazz' },
+  { name: 'Dim WH',        intervals: [0,1,3,4,6,7,9,10], chord: [0,3,6,9], chordName: 'dim7', cat: 'jazz' },
+  { name: 'Dim HW',        intervals: [0,2,3,5,6,8,9,11], chord: [0,4,7,10], chordName: '7', cat: 'jazz' },
+  { name: 'Lydian ♭7',     intervals: [0,2,4,6,7,9,10], chord: [0,4,7,10], chordName: '7', cat: 'jazz' },
+  { name: 'Lydian Aug',    intervals: [0,2,4,6,8,9,11], chord: [0,4,8,11], chordName: 'Maj7#5', cat: 'jazz' },
+  { name: 'Loc ♮2',        intervals: [0,2,3,5,6,8,10], chord: [0,3,6,10], chordName: 'm7♭5', cat: 'jazz' },
 ];
 
 const CHORD_TYPES = [
@@ -1618,9 +1628,11 @@ function scaleSingPreset(p) {
   selectedScalesForSing.clear();
   btns.forEach(b => b.classList.remove('selected'));
   if (p === 'modes') {
-    SCALES.forEach((s, i) => { if (s.cat === 'mode') { selectedScalesForSing.add(i); btns[i].classList.add('selected'); } });
+    SCALES.forEach((s, i) => { if (s.cat === 'church') { selectedScalesForSing.add(i); btns[i].classList.add('selected'); } });
   } else if (p === 'minor') {
     SCALES.forEach((s, i) => { if (s.cat === 'minor') { selectedScalesForSing.add(i); btns[i].classList.add('selected'); } });
+  } else if (p === 'jazz') {
+    SCALES.forEach((s, i) => { if (s.cat === 'jazz') { selectedScalesForSing.add(i); btns[i].classList.add('selected'); } });
   } else if (p === 'all') {
     SCALES.forEach((_, i) => { selectedScalesForSing.add(i); btns[i].classList.add('selected'); });
   }
