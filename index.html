@@ -1030,6 +1030,7 @@ body::before {
       <div class="preset-row">
         <button class="preset-btn" onclick="cadencePreset('major')">Major</button>
         <button class="preset-btn" onclick="cadencePreset('minor')">Minor</button>
+        <button class="preset-btn" onclick="cadencePreset('single')">Single</button>
         <button class="preset-btn" onclick="cadencePreset('all')">All</button>
         <button class="preset-btn" onclick="cadencePreset('none')">Clear</button>
       </div>
@@ -1370,6 +1371,23 @@ const CADENCES = [
       { degRoot: 0,  name: 'IMaj7',   quality: 'Maj7' },
     ]
   },
+  // Single chords
+  {
+    name: 'IMaj7', short: 'I△', cat: 'single',
+    chords: [ { degRoot: 0, name: 'IMaj7', quality: 'Maj7' } ]
+  },
+  {
+    name: 'Im7', short: 'i⁷', cat: 'single',
+    chords: [ { degRoot: 0, name: 'Im7', quality: 'm7' } ]
+  },
+  {
+    name: 'V7', short: 'V⁷', cat: 'single',
+    chords: [ { degRoot: 7, name: 'V7', quality: '7' } ]
+  },
+  {
+    name: 'iim7', short: 'ii⁷', cat: 'single',
+    chords: [ { degRoot: 2, name: 'ii-7', quality: 'm7' } ]
+  },
 ];
 
 // MIDI note helpers: A4 = 69 = 440Hz
@@ -1598,6 +1616,8 @@ function cadencePreset(p) {
     CADENCES.forEach((c, i) => { if (c.cat === 'major') { selectedCadences.add(i); btns[i].classList.add('selected'); } });
   } else if (p === 'minor') {
     CADENCES.forEach((c, i) => { if (c.cat === 'minor') { selectedCadences.add(i); btns[i].classList.add('selected'); } });
+  } else if (p === 'single') {
+    CADENCES.forEach((c, i) => { if (c.cat === 'single') { selectedCadences.add(i); btns[i].classList.add('selected'); } });
   } else if (p === 'all') {
     CADENCES.forEach((_, i) => { selectedCadences.add(i); btns[i].classList.add('selected'); });
   }
@@ -2339,12 +2359,17 @@ function updateDisplay() {
 
   if (gameMode === 'bass') {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreBass}`;
+    const isSingle = currentCadence.chords.length === 1;
     const chordName = currentCadence.chords[bassIndex] ? currentCadence.chords[bassIndex].name : '✓';
-    document.getElementById('intervalDisplay').textContent = `${currentCadence.name} — ${chordName} (${bassIndex + 1}/${bassNotes.length})`;
+    document.getElementById('intervalDisplay').textContent = isSingle
+      ? `${chordName}`
+      : `${currentCadence.name} — ${chordName} (${bassIndex + 1}/${bassNotes.length})`;
     document.getElementById('noteFrom').textContent = `Key: ${NOTE_NAMES[bassKeyRoot]}`;
     document.getElementById('noteTarget').textContent = bassIndex < bassNotes.length ? midiToName(bassNotes[bassIndex]) : '✓';
     document.getElementById('arrowDir').innerHTML = '&#127928;';
-    document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay cadence';
+    document.getElementById('replayHint').innerHTML = isSingle
+      ? 'Press <kbd>SPACE</kbd> or tap here to replay chord'
+      : 'Press <kbd>SPACE</kbd> or tap here to replay cadence';
     updateBassPiano(null);
   } else if (gameMode === 'chord') {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreChord}`;
@@ -2500,7 +2525,7 @@ async function startGame() {
 
     setTimeout(() => {
       if (bassAnnounceKey) {
-        const isMinor = currentCadence.cat === 'minor';
+        const isMinor = currentCadence.cat === 'minor' || currentCadence.name === 'Im7';
         announceBassKey(bassKeyRoot, isMinor, startListening);
       } else {
         startListening();
@@ -2821,7 +2846,7 @@ function onSuccess() {
 
     setTimeout(() => {
       if (bassAnnounceKey) {
-        const isMinor = currentCadence.cat === 'minor';
+        const isMinor = currentCadence.cat === 'minor' || currentCadence.name === 'Im7';
         announceBassKey(bassKeyRoot, isMinor, playNext);
       } else {
         playNext();
@@ -3030,7 +3055,7 @@ function endGame() {
       localStorage.setItem('notechaser_hi_bass', hiScoreBass);
     }
     document.getElementById('goScore').textContent = score;
-    document.getElementById('goScoreLabel').textContent = 'Cadences Completed';
+    document.getElementById('goScoreLabel').textContent = 'Bass Notes Found';
     const bestEl = document.getElementById('goBest');
     if (isNewBest && score > 0) {
       bestEl.textContent = 'NEW BEST!';
