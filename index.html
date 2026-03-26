@@ -965,7 +965,7 @@ body::before {
   </div>
 
   <!-- SETUP SCREEN -->
-  <div id="setup" class="screen active">
+  <div id="setup" class="screen active" onclick="warmUpSpeech()">
     <div class="section-label">Mode</div>
     <div class="mode-row">
       <button class="mode-btn selected" data-mode="voice" onclick="setMode('voice')">&#127908; Intervals Voice</button>
@@ -1720,7 +1720,21 @@ function toggleBassAnnounce(on) {
   });
 }
 
+let speechWarmedUp = false;
+function warmUpSpeech() {
+  if (speechWarmedUp) return;
+  speechWarmedUp = true;
+  // Unlock speechSynthesis on first user interaction (crucial for mobile)
+  speechSynthesis.cancel();
+  const w = new SpeechSynthesisUtterance(' ');
+  w.volume = 0;
+  w.rate = 2;
+  speechSynthesis.speak(w);
+  speechSynthesis.getVoices();
+}
+
 function setMode(m) {
+  warmUpSpeech(); // unlock speech early on first tap
   gameMode = m;
   document.querySelectorAll('.mode-btn').forEach(b => {
     b.classList.toggle('selected', b.dataset.mode === m);
@@ -2528,14 +2542,8 @@ async function startGame() {
 
   initAudio();
 
-  // Warm up SpeechSynthesis on mobile (requires user gesture to unlock)
-  speechSynthesis.cancel();
-  const warmUp = new SpeechSynthesisUtterance(' ');
-  warmUp.volume = 0;
-  warmUp.rate = 2;
-  speechSynthesis.speak(warmUp);
-  // Force load voices (some mobile browsers lazy-load them)
-  speechSynthesis.getVoices();
+  // Ensure speech is warmed up (in case setMode wasn't tapped)
+  warmUpSpeech();
 
   score = 0;
   holdStart = 0;
