@@ -1497,6 +1497,7 @@ let scaleCurrentDir = 'up'; // tracks actual direction for voice announcement
 let hiScoreScale = parseInt(localStorage.getItem('notechaser_hi_scale') || '0');
 
 let audioCtx = null;
+let masterGain = null;
 let analyser = null;
 let micStream = null;
 let gameActive = false;
@@ -1880,6 +1881,17 @@ function updatePianoHighlights(fromMidi, targetMidi, singingMidi) {
 function initAudio() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Master gain + compressor for balanced output (especially vs speech on mobile)
+    const compressor = audioCtx.createDynamicsCompressor();
+    compressor.threshold.value = -20;
+    compressor.knee.value = 10;
+    compressor.ratio.value = 4;
+    compressor.attack.value = 0.003;
+    compressor.release.value = 0.15;
+    compressor.connect(audioCtx.destination);
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.6; // leave headroom for speech
+    masterGain.connect(compressor);
   }
   if (audioCtx.state === 'suspended') audioCtx.resume();
 }
@@ -1908,7 +1920,7 @@ function playNote(midi, duration = 2) {
   osc2.connect(mix2);
   mix1.connect(gain);
   mix2.connect(gain);
-  gain.connect(audioCtx.destination);
+  gain.connect(masterGain);
 
   // Envelope
   gain.gain.setValueAtTime(0, now);
@@ -1931,7 +1943,7 @@ function playSuccessChime() {
     osc.type = 'sine';
     osc.frequency.value = [880, 1108.73, 1318.51][i]; // A5, C#6, E6
     osc.connect(g);
-    g.connect(audioCtx.destination);
+    g.connect(masterGain);
     g.gain.setValueAtTime(0, now + t);
     g.gain.linearRampToValueAtTime(0.12, now + t + 0.02);
     g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.25);
@@ -1949,7 +1961,7 @@ function playFailSound() {
   osc.frequency.setValueAtTime(200, now);
   osc.frequency.linearRampToValueAtTime(80, now + 0.4);
   osc.connect(g);
-  g.connect(audioCtx.destination);
+  g.connect(masterGain);
   g.gain.setValueAtTime(0.15, now);
   g.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
   osc.start(now);
@@ -2047,17 +2059,37 @@ function detectPitch() {
 
 // ── CHORD PLAYBACK ──
 function speak(text, callback) {
+  // Cancel any queued speech to avoid pile-ups
+  speechSynthesis.cancel();
+
+  // Duck music volume during speech so voice is clearly heard
+  if (masterGain) {
+    masterGain.gain.setTargetAtTime(0.15, audioCtx.currentTime, 0.05);
+  }
+
   const utter = new SpeechSynthesisUtterance(text);
   utter.rate = 1;
   utter.pitch = 1;
-  utter.volume = 0.8;
-  if (callback) utter.onend = callback;
+  utter.volume = 1.0;
+
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    // Restore music volume
+    if (masterGain) {
+      masterGain.gain.setTargetAtTime(0.6, audioCtx.currentTime, 0.1);
+    }
+    if (callback) callback();
+  };
+
+  utter.onend = finish;
+  utter.onerror = finish;
   speechSynthesis.speak(utter);
-  // Fallback in case onend doesn't fire (some browsers)
-  if (callback) {
-    const fallback = setTimeout(() => callback(), 3000);
-    utter.onend = () => { clearTimeout(fallback); callback(); };
-  }
+
+  // Fallback: if onend/onerror never fire (common on mobile)
+  const estimatedMs = Math.max(1500, text.length * 100);
+  setTimeout(finish, estimatedMs);
 }
 
 function announceScale(rootMidi, scaleName, callback) {
@@ -2241,7 +2273,7 @@ function playChordConfirmBeep() {
   osc.type = 'sine';
   osc.frequency.value = 880;
   osc.connect(g);
-  g.connect(audioCtx.destination);
+  g.connect(masterGain);
   g.gain.setValueAtTime(0.1, now);
   g.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
   osc.start(now);
@@ -2498,9 +2530,12 @@ async function startGame() {
 
   // Warm up SpeechSynthesis on mobile (requires user gesture to unlock)
   speechSynthesis.cancel();
-  const warmUp = new SpeechSynthesisUtterance('');
+  const warmUp = new SpeechSynthesisUtterance(' ');
   warmUp.volume = 0;
+  warmUp.rate = 2;
   speechSynthesis.speak(warmUp);
+  // Force load voices (some mobile browsers lazy-load them)
+  speechSynthesis.getVoices();
 
   score = 0;
   holdStart = 0;
