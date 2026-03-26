@@ -2223,11 +2223,12 @@ function chooseNextChord() {
 }
 
 function updateChordPiano(singingMidi) {
+  const showTargets = isChordSing(); // only show target notes in sing mode
   document.querySelectorAll('.piano-key').forEach(k => {
     k.classList.remove('active-from', 'active-target', 'active-singing');
     const m = parseInt(k.dataset.midi);
     if (chordHitNotes.has(m)) k.classList.add('active-singing'); // green
-    if (chordTargetNotes.has(m)) k.classList.add('active-target'); // cyan
+    if (showTargets && chordTargetNotes.has(m)) k.classList.add('active-target'); // cyan — only in sing mode
     if (singingMidi !== null && m === singingMidi) k.classList.add('active-from'); // magenta = currently playing
   });
 }
