@@ -2381,7 +2381,7 @@ function updateDisplay() {
       document.getElementById('noteFrom').textContent = `Root: ${midiToName(chordRoot)}`;
     } else {
       document.getElementById('intervalDisplay').textContent = `${remaining} note${remaining !== 1 ? 's' : ''} left`;
-      document.getElementById('noteFrom').textContent = 'Listen!';
+      document.getElementById('noteFrom').textContent = `Root: ${midiToName(chordRoot)}`;
     }
     document.getElementById('noteTarget').textContent = `${chordHitNotes.size}/${total}`;
     document.getElementById('arrowDir').innerHTML = '&#127927;';
