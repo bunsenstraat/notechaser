@@ -2058,71 +2058,38 @@ function detectPitch() {
 }
 
 // ── CHORD PLAYBACK ──
-let speechReady = false;
-let speechKeepAlive = null;
-// Pre-load voices on mobile (some browsers lazy-load them)
-if (typeof speechSynthesis !== 'undefined') {
-  speechSynthesis.getVoices();
-  speechSynthesis.addEventListener('voiceschanged', () => { speechSynthesis.getVoices(); });
-}
-
-// Mobile Safari/Chrome: speechSynthesis gets "stuck" after ~15s idle.
-// Periodically poke it to keep it alive during a game session.
-function startSpeechKeepAlive() {
-  if (speechKeepAlive) return;
-  speechKeepAlive = setInterval(() => {
-    if (!speechSynthesis.speaking) {
-      speechSynthesis.cancel(); // unstick on mobile Safari
-    }
-  }, 10000);
-}
-function stopSpeechKeepAlive() {
-  if (speechKeepAlive) { clearInterval(speechKeepAlive); speechKeepAlive = null; }
-}
-
-const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
 function speak(text, callback) {
+  // Cancel any queued speech to avoid pile-ups
+  speechSynthesis.cancel();
+
   // Duck music volume during speech so voice is clearly heard
-  if (masterGain && audioCtx) {
+  if (masterGain) {
     masterGain.gain.setTargetAtTime(0.15, audioCtx.currentTime, 0.05);
   }
 
-  // Cancel any queued speech
-  speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.rate = 1;
+  utter.pitch = 1;
+  utter.volume = 1.0;
 
-  const doSpeak = () => {
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.rate = 1;
-    utter.pitch = 1;
-    utter.volume = 1.0;
-
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      // Restore music volume
-      if (masterGain && audioCtx) {
-        masterGain.gain.setTargetAtTime(0.6, audioCtx.currentTime, 0.1);
-      }
-      if (callback) callback();
-    };
-
-    utter.onend = finish;
-    utter.onerror = finish;
-    speechSynthesis.speak(utter);
-
-    // Fallback: if onend/onerror never fire (common on mobile)
-    const estimatedMs = Math.max(1500, text.length * 100);
-    setTimeout(finish, estimatedMs);
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    // Restore music volume
+    if (masterGain) {
+      masterGain.gain.setTargetAtTime(0.6, audioCtx.currentTime, 0.1);
+    }
+    if (callback) callback();
   };
 
-  // Mobile needs a delay after cancel, desktop doesn't
-  if (isMobile) {
-    setTimeout(doSpeak, 80);
-  } else {
-    doSpeak();
-  }
+  utter.onend = finish;
+  utter.onerror = finish;
+  speechSynthesis.speak(utter);
+
+  // Fallback: if onend/onerror never fire (common on mobile)
+  const estimatedMs = Math.max(1500, text.length * 100);
+  setTimeout(finish, estimatedMs);
 }
 
 function announceScale(rootMidi, scaleName, callback) {
@@ -2562,19 +2529,13 @@ async function startGame() {
   initAudio();
 
   // Warm up SpeechSynthesis on mobile (requires user gesture to unlock)
-  // Must actually speak something audible — silent/empty utterances don't unlock on all browsers
   speechSynthesis.cancel();
-  if (!speechReady) {
-    const warmUp = new SpeechSynthesisUtterance('.');
-    warmUp.volume = 0.01; // barely audible but enough to unlock
-    warmUp.rate = 2;
-    warmUp.onend = () => { speechReady = true; };
-    speechSynthesis.speak(warmUp);
-  }
+  const warmUp = new SpeechSynthesisUtterance(' ');
+  warmUp.volume = 0;
+  warmUp.rate = 2;
+  speechSynthesis.speak(warmUp);
   // Force load voices (some mobile browsers lazy-load them)
   speechSynthesis.getVoices();
-  // Keep speech engine alive during game session
-  startSpeechKeepAlive();
 
   score = 0;
   holdStart = 0;
@@ -3125,7 +3086,6 @@ function endGame() {
   melodyPlaying = false;
   if (animFrame) cancelAnimationFrame(animFrame);
   stopMic();
-  stopSpeechKeepAlive();
 
   playFailSound();
 
