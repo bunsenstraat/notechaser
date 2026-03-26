@@ -2376,8 +2376,13 @@ function updateDisplay() {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreChord}`;
     const remaining = chordTargetNotes.size;
     const total = currentChordType.intervals.length;
-    document.getElementById('intervalDisplay').textContent = `${currentChordType.name} — ${remaining} note${remaining !== 1 ? 's' : ''} left`;
-    document.getElementById('noteFrom').textContent = `Root: ${midiToName(chordRoot)}`;
+    if (isChordSing()) {
+      document.getElementById('intervalDisplay').textContent = `${currentChordType.name} — ${remaining} note${remaining !== 1 ? 's' : ''} left`;
+      document.getElementById('noteFrom').textContent = `Root: ${midiToName(chordRoot)}`;
+    } else {
+      document.getElementById('intervalDisplay').textContent = `${remaining} note${remaining !== 1 ? 's' : ''} left`;
+      document.getElementById('noteFrom').textContent = 'Listen!';
+    }
     document.getElementById('noteTarget').textContent = `${chordHitNotes.size}/${total}`;
     document.getElementById('arrowDir').innerHTML = '&#127927;';
     document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay chord';
