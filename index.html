@@ -975,6 +975,7 @@ body::before {
       <button class="mode-btn" data-mode="chord" onclick="setMode('chord')">&#127927; Chords</button>
       <button class="mode-btn" data-mode="bass" onclick="setMode('bass')">&#127928; Find the Bass</button>
       <button class="mode-btn" data-mode="scale" onclick="setMode('scale')">&#127925; Scales</button>
+      <button class="mode-btn" data-mode="licks" onclick="setMode('licks')">&#127927; Licks</button>
     </div>
 
     <!-- Interval-based setup (voice/instrument/melody) -->
@@ -1063,6 +1064,33 @@ body::before {
       <div class="dir-row">
         <button class="dir-btn selected scale-range-btn" data-srange="voice" onclick="setScaleRange(false)">&#127908; Voice</button>
         <button class="dir-btn scale-range-btn" data-srange="wide" onclick="setScaleRange(true)">&#127929; Keyboard</button>
+      </div>
+    </div>
+
+    <!-- Licks setup -->
+    <div id="licksSetup" style="display:none">
+      <div class="section-label">Licks</div>
+      <div class="scale-grid" id="licksGrid"></div>
+      <div class="section-label" style="margin-top:12px">Presets</div>
+      <div class="preset-row">
+        <button class="preset-btn" onclick="licksPreset('basic')">Basic</button>
+        <button class="preset-btn" onclick="licksPreset('bebop')">Bebop</button>
+        <button class="preset-btn" onclick="licksPreset('minor')">Minor</button>
+        <button class="preset-btn" onclick="licksPreset('ii-V')">ii-V</button>
+        <button class="preset-btn" onclick="licksPreset('advanced')">Advanced</button>
+        <button class="preset-btn" onclick="licksPreset('all')">All</button>
+        <button class="preset-btn" onclick="licksPreset('none')">Clear</button>
+      </div>
+      <div class="section-label" style="margin-top:12px">Range</div>
+      <div class="dir-row">
+        <button class="dir-btn selected lick-range-btn" data-lrange="voice" onclick="setLickRange(false)">&#127908; Voice</button>
+        <button class="dir-btn lick-range-btn" data-lrange="wide" onclick="setLickRange(true)">&#127929; Keyboard</button>
+      </div>
+      <div class="section-label" style="margin-top:12px">New Lick Every</div>
+      <div class="preset-row">
+        <button class="preset-btn lick-cycle-btn selected" data-lcycle="3" onclick="setLickCycle(3)">3 keys</button>
+        <button class="preset-btn lick-cycle-btn" data-lcycle="6" onclick="setLickCycle(6)">6 keys</button>
+        <button class="preset-btn lick-cycle-btn" data-lcycle="12" onclick="setLickCycle(12)">All 12</button>
       </div>
     </div>
 
@@ -1317,6 +1345,32 @@ const CHORD_TYPES = [
 ];
 
 // Jazz chord voicing qualities (Type A = 3rd on bottom, Type B = 7th on bottom)
+// ── BEBOP LICKS ──
+// Each lick is an array of semitones relative to the root (0 = root)
+// Negative values = below root, positive = above
+const LICKS = [
+  { name: '1-2-3-5', cat: 'basic', notes: [0, 2, 4, 7] },
+  { name: '1-3-5-7', cat: 'basic', notes: [0, 4, 7, 11] },
+  { name: '5-4-3-1', cat: 'basic', notes: [7, 5, 4, 0] },
+  { name: 'Enclosure 3rd', cat: 'bebop', notes: [5, 3, 4, 0, 2] },
+  { name: 'Enclosure Root', cat: 'bebop', notes: [2, -1, 0, 4, 7] },
+  { name: 'Honeysuckle', cat: 'bebop', notes: [7, 11, 12, 10, 7, 4, 5, 2, 0] },
+  { name: 'Parker #1', cat: 'bebop', notes: [0, 2, 4, 5, 7, 4, 2, 0] },
+  { name: 'Parker #2', cat: 'bebop', notes: [0, 11, 7, 4, 5, 7, 9, 11, 12] },
+  { name: 'Approach 3rd', cat: 'bebop', notes: [2, 3, 5, 4] },
+  { name: 'Approach 7th', cat: 'bebop', notes: [9, 10, 12, 11] },
+  { name: 'Bebop Run', cat: 'bebop', notes: [0, 2, 4, 5, 7, 9, 10, 11, 12] },
+  { name: 'Minor Cry', cat: 'minor', notes: [0, 3, 5, 7, 10, 12, 10, 7] },
+  { name: 'Minor Turn', cat: 'minor', notes: [0, 2, 3, 5, 3, 2, 0, -2] },
+  { name: 'Minor Encl.', cat: 'minor', notes: [5, 2, 4, 3, 0, 3, 7] },
+  { name: 'ii-V Lick #1', cat: 'ii-V', notes: [0, 2, 4, 5, 4, 2, 1, 0] },
+  { name: 'ii-V Lick #2', cat: 'ii-V', notes: [7, 5, 4, 2, 0, 1, -1, 0] },
+  { name: 'ii-V Lick #3', cat: 'ii-V', notes: [0, 2, 3, 5, 7, 9, 7, 5, 4, 2, 0] },
+  { name: 'Coltrane', cat: 'advanced', notes: [0, 4, 7, 11, 14, 11, 7, 4, 0] },
+  { name: 'Digital Pattern', cat: 'advanced', notes: [0, 2, 4, 7, 2, 4, 7, 9] },
+  { name: 'Pentatonic Run', cat: 'advanced', notes: [0, 2, 4, 7, 9, 12, 9, 7, 4, 2, 0] },
+];
+
 const VOICINGS = {
   'm7':    { A: [3, 7, 10, 14],  B: [10, 14, 15, 19] },
   '7':     { A: [4, 9, 10, 14],  B: [10, 14, 16, 21] },
@@ -1446,10 +1500,11 @@ let CONFIDENCE_THRESHOLD = 0.2;
 function isInstrumentMode() { return (gameMode === 'instrument' || gameMode === 'harmonic' || gameMode === 'chord' || gameMode === 'bass') && !(gameMode === 'chord' && chordPlayback === 'sing'); }
 function isChordSing() { return gameMode === 'chord' && chordPlayback === 'sing'; }
 function isScaleWide() { return gameMode === 'scale' && scaleRangeWide; }
-function getRangeLow() { if (gameMode === 'bass') return BASS_RANGE_LOW; if (isChordSing()) return CHORD_SING_LOW; if (isScaleWide()) return INST_RANGE_LOW; return isInstrumentMode() ? INST_RANGE_LOW : RANGE_LOW; }
-function getRangeHigh() { if (gameMode === 'bass') return BASS_RANGE_LOW + 12; if (isChordSing()) return CHORD_SING_LOW + 8; if (isScaleWide()) return INST_RANGE_HIGH; return isInstrumentMode() ? INST_RANGE_HIGH : RANGE_HIGH; }
-function getRangeAbsLow() { if (gameMode === 'bass') return BASS_RANGE_LOW; if (isChordSing()) return CHORD_SING_LOW; if (isScaleWide()) return INST_RANGE_ABS_LOW; return isInstrumentMode() ? INST_RANGE_ABS_LOW : RANGE_ABS_LOW; }
-function getRangeAbsHigh() { if (gameMode === 'bass') return BASS_RANGE_HIGH; if (isChordSing()) return CHORD_SING_HIGH; if (isScaleWide()) return INST_RANGE_ABS_HIGH; return isInstrumentMode() ? INST_RANGE_ABS_HIGH : RANGE_ABS_HIGH; }
+function isLickWide() { return gameMode === 'licks' && lickRangeWide; }
+function getRangeLow() { if (gameMode === 'bass') return BASS_RANGE_LOW; if (isChordSing()) return CHORD_SING_LOW; if (isScaleWide() || isLickWide()) return INST_RANGE_LOW; return isInstrumentMode() ? INST_RANGE_LOW : RANGE_LOW; }
+function getRangeHigh() { if (gameMode === 'bass') return BASS_RANGE_LOW + 12; if (isChordSing()) return CHORD_SING_LOW + 8; if (isScaleWide() || isLickWide()) return INST_RANGE_HIGH; return isInstrumentMode() ? INST_RANGE_HIGH : RANGE_HIGH; }
+function getRangeAbsLow() { if (gameMode === 'bass') return BASS_RANGE_LOW; if (isChordSing()) return CHORD_SING_LOW; if (isScaleWide() || isLickWide()) return INST_RANGE_ABS_LOW; return isInstrumentMode() ? INST_RANGE_ABS_LOW : RANGE_ABS_LOW; }
+function getRangeAbsHigh() { if (gameMode === 'bass') return BASS_RANGE_HIGH; if (isChordSing()) return CHORD_SING_HIGH; if (isScaleWide() || isLickWide()) return INST_RANGE_ABS_HIGH; return isInstrumentMode() ? INST_RANGE_ABS_HIGH : RANGE_ABS_HIGH; }
 
 // ── STATE ──
 let selectedIntervals = new Set();
@@ -1464,6 +1519,19 @@ let melodyRound = 0;
 let melodySpeed = 3; // rounds before adding a note (4=chill, 3=normal, 2=fast, 1=insane)
 let melodyPlaying = false;
 let hiScoreMelody = parseInt(localStorage.getItem('notechaser_hi_melody') || '0');
+
+// Lick mode state
+let selectedLicks = new Set();
+let lickRangeWide = false;
+let lickCycle = 3; // new lick every N keys
+let currentLick = null;
+let lickNotes = []; // actual MIDI notes to play/detect
+let lickNoteIndex = 0;
+let lickRoot = null;
+let lickKeysPlayed = 0; // how many keys done for current lick
+let lickKeyOrder = []; // shuffled key order
+let lickKeyIndex = 0;
+let hiScoreLick = parseInt(localStorage.getItem('notechaser_hi_lick') || '0');
 
 // Harmonic mode state
 let selectedScale = null;
@@ -1669,6 +1737,82 @@ function scaleSingPreset(p) {
   updateStartBtn();
 }
 
+// Build lick grid
+const licksGrid = document.getElementById('licksGrid');
+LICKS.forEach((lick, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'scale-btn lick-btn';
+  btn.innerHTML = `${lick.name}<span class="chord-label">${lick.notes.length} notes</span>`;
+  btn.dataset.idx = i;
+  btn.addEventListener('click', () => {
+    if (selectedLicks.has(i)) {
+      selectedLicks.delete(i);
+      btn.classList.remove('selected');
+    } else {
+      selectedLicks.add(i);
+      btn.classList.add('selected');
+    }
+    updateStartBtn();
+  });
+  licksGrid.appendChild(btn);
+});
+
+function licksPreset(p) {
+  const btns = licksGrid.querySelectorAll('.lick-btn');
+  selectedLicks.clear();
+  btns.forEach(b => b.classList.remove('selected'));
+  if (p === 'all') {
+    LICKS.forEach((_, i) => { selectedLicks.add(i); btns[i].classList.add('selected'); });
+  } else if (p !== 'none') {
+    LICKS.forEach((l, i) => { if (l.cat === p) { selectedLicks.add(i); btns[i].classList.add('selected'); } });
+  }
+  updateStartBtn();
+}
+
+function setLickRange(wide) {
+  lickRangeWide = wide;
+  document.querySelectorAll('.lick-range-btn').forEach(b => {
+    b.classList.toggle('selected', (b.dataset.lrange === 'wide') === wide);
+  });
+}
+
+function setLickCycle(n) {
+  lickCycle = n;
+  document.querySelectorAll('.lick-cycle-btn').forEach(b => {
+    b.classList.toggle('selected', parseInt(b.dataset.lcycle) === n);
+  });
+}
+
+function shuffleKeys() {
+  // Shuffle array of 0-11 (pitch classes)
+  const keys = Array.from({length: 12}, (_, i) => i);
+  for (let i = keys.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [keys[i], keys[j]] = [keys[j], keys[i]];
+  }
+  return keys;
+}
+
+function buildLickNotes(lick, rootMidi) {
+  return lick.notes.map(s => rootMidi + s);
+}
+
+function pickLickRoot(pitchClass) {
+  // Place the lick so all notes fit in range
+  const lo = lickRangeWide ? INST_RANGE_ABS_LOW : RANGE_ABS_LOW;
+  const hi = lickRangeWide ? INST_RANGE_ABS_HIGH : RANGE_ABS_HIGH;
+  const minNote = Math.min(...currentLick.notes);
+  const maxNote = Math.max(...currentLick.notes);
+  // Find a root with this pitch class that fits
+  for (let oct = 2; oct <= 6; oct++) {
+    const root = pitchClass + oct * 12;
+    if (root + minNote >= lo && root + maxNote <= hi) return root;
+  }
+  // Fallback: just use the lowest octave that fits
+  const root = lo + pitchClass - (lo % 12);
+  return root >= lo ? root : root + 12;
+}
+
 function toggleScaleDir(d) {
   if (d === 'both') {
     scaleDirBoth = !scaleDirBoth;
@@ -1758,12 +1902,14 @@ function setMode(m) {
   const isChord = (m === 'chord');
   const isBass = (m === 'bass');
   const isScale = (m === 'scale');
+  const isLicks = (m === 'licks');
   const isMelody = (m === 'melody' || m === 'harmonic');
-  document.getElementById('intervalSetup').style.display = (isHarmonic || isChord || isBass || isScale) ? 'none' : '';
+  document.getElementById('intervalSetup').style.display = (isHarmonic || isChord || isBass || isScale || isLicks) ? 'none' : '';
   document.getElementById('scaleSetup').style.display = isHarmonic ? '' : 'none';
   document.getElementById('chordSetup').style.display = isChord ? '' : 'none';
   document.getElementById('bassSetup').style.display = isBass ? '' : 'none';
   document.getElementById('scaleSingSetup').style.display = isScale ? '' : 'none';
+  document.getElementById('licksSetup').style.display = isLicks ? '' : 'none';
   document.querySelectorAll('.melody-only-setting').forEach(el => {
     el.style.display = isMelody ? '' : 'none';
   });
@@ -1804,6 +1950,8 @@ function updateStartBtn() {
     document.getElementById('startBtn').disabled = selectedCadences.size === 0;
   } else if (gameMode === 'scale') {
     document.getElementById('startBtn').disabled = selectedScalesForSing.size === 0;
+  } else if (gameMode === 'licks') {
+    document.getElementById('startBtn').disabled = selectedLicks.size === 0;
   } else {
     document.getElementById('startBtn').disabled = selectedIntervals.size === 0;
   }
@@ -1875,6 +2023,11 @@ function replayBaseNote() {
     announceScale(scaleRoot, scale.name, () => {
       playNote(scaleRoot, 0.8);
       setTimeout(() => { roundStart = performance.now(); }, 1000);
+    });
+  } else if (gameMode === 'licks') {
+    playMelody(lickNotes, () => {
+      updateDisplay();
+      roundStart = performance.now();
     });
   } else if (gameMode === 'melody') {
     playMelody(melodyNotes, () => {
@@ -2474,6 +2627,15 @@ function updateDisplay() {
     document.getElementById('arrowDir').innerHTML = '&#127925;';
     document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to hear scale again';
     updatePianoHighlights(null, scaleNotes[scaleNoteIndex], null);
+  } else if (gameMode === 'licks') {
+    document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreLick}`;
+    const keyName = NOTE_NAMES[lickKeyOrder[lickKeyIndex]];
+    document.getElementById('intervalDisplay').textContent = `${currentLick.name} in ${keyName} — Note ${lickNoteIndex + 1} / ${lickNotes.length}`;
+    document.getElementById('noteFrom').textContent = `Key: ${keyName}`;
+    document.getElementById('noteTarget').textContent = midiToName(lickNotes[lickNoteIndex]);
+    document.getElementById('arrowDir').innerHTML = '&#127927;';
+    document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay lick';
+    updatePianoHighlights(null, lickNotes[lickNoteIndex], null);
   } else if (gameMode === 'instrument') {
     document.getElementById('intervalDisplay').textContent = 'Listen & Play';
     document.getElementById('noteFrom').textContent = '?';
@@ -2639,6 +2801,31 @@ async function startGame() {
           roundStart = performance.now();
           gameLoop();
         }, 1000);
+      });
+    }, 400);
+  } else if (gameMode === 'licks') {
+    score = 0;
+    lickNoteIndex = 0;
+    lickKeysPlayed = 0;
+    lickKeyOrder = shuffleKeys();
+    lickKeyIndex = 0;
+    // Pick first lick
+    const lickIndices = [...selectedLicks];
+    currentLick = LICKS[lickIndices[Math.floor(Math.random() * lickIndices.length)]];
+    lickRoot = pickLickRoot(lickKeyOrder[0]);
+    lickNotes = buildLickNotes(currentLick, lickRoot);
+    buildPiano();
+    updateDisplay();
+
+    setTimeout(() => {
+      const keyName = NOTE_NAMES[lickKeyOrder[lickKeyIndex]].replace('#', ' sharp').replace('b', ' flat');
+      speak(`${currentLick.name}, in ${keyName}`, () => {
+        playMelody(lickNotes, () => {
+          updateDisplay();
+          gameActive = true;
+          roundStart = performance.now();
+          gameLoop();
+        });
       });
     }, 400);
   } else if (gameMode === 'melody' || gameMode === 'harmonic') {
@@ -2807,7 +2994,7 @@ function gameLoop() {
       }
     } else {
       // All other modes: single target
-      const targetMidi = gameMode === 'scale' ? scaleNotes[scaleNoteIndex] : (gameMode === 'melody' || gameMode === 'harmonic') ? melodyNotes[melodyIndex] : currentTargetMidi;
+      const targetMidi = gameMode === 'licks' ? lickNotes[lickNoteIndex] : gameMode === 'scale' ? scaleNotes[scaleNoteIndex] : (gameMode === 'melody' || gameMode === 'harmonic') ? melodyNotes[melodyIndex] : currentTargetMidi;
       const centsOff = (midi - targetMidi) * 100;
       const needlePos = 50 + (centsOff / 400) * 100;
       const clampedPos = Math.max(2, Math.min(98, needlePos));
@@ -2825,7 +3012,7 @@ function gameLoop() {
       singingEl.innerHTML = `You: <span>${noteName}</span>`;
       if (gameMode === 'instrument') {
         updatePianoHighlights(null, null, roundedMidi);
-      } else if (gameMode === 'scale' || gameMode === 'melody' || gameMode === 'harmonic') {
+      } else if (gameMode === 'licks' || gameMode === 'scale' || gameMode === 'melody' || gameMode === 'harmonic') {
         updatePianoHighlights(null, targetMidi, roundedMidi);
       } else {
         updatePianoHighlights(currentBaseMidi, currentTargetMidi, roundedMidi);
@@ -2855,6 +3042,8 @@ function gameLoop() {
       updateBassPiano(null);
     } else if (gameMode === 'chord') {
       updateChordPiano(null);
+    } else if (gameMode === 'licks') {
+      updatePianoHighlights(null, lickNotes[lickNoteIndex], null);
     } else if (gameMode === 'scale') {
       updatePianoHighlights(null, scaleNotes[scaleNoteIndex], null);
     } else if (gameMode === 'melody' || gameMode === 'harmonic') {
@@ -2955,6 +3144,62 @@ function onSuccess() {
         playNext();
       }
     }, 800);
+    return;
+  }
+
+  if (gameMode === 'licks') {
+    // Lick mode: advance to next note in lick
+    lickNoteIndex++;
+
+    const dot = document.createElement('div');
+    dot.className = 'streak-dot';
+    document.getElementById('streakDots').appendChild(dot);
+
+    if (lickNoteIndex >= lickNotes.length) {
+      // Lick complete in this key!
+      cancelAnimationFrame(animFrame);
+      score++;
+      lickKeysPlayed++;
+      document.getElementById('scoreDisplay').textContent = score;
+      document.getElementById('streakDots').innerHTML = '';
+
+      // Move to next key
+      lickKeyIndex++;
+
+      // Check if we need a new lick
+      if (lickKeysPlayed >= lickCycle || lickKeyIndex >= 12) {
+        // New lick + reshuffle keys
+        const lickIndices = [...selectedLicks];
+        currentLick = LICKS[lickIndices[Math.floor(Math.random() * lickIndices.length)]];
+        lickKeyOrder = shuffleKeys();
+        lickKeyIndex = 0;
+        lickKeysPlayed = 0;
+      }
+
+      // Build lick in new key
+      lickRoot = pickLickRoot(lickKeyOrder[lickKeyIndex]);
+      lickNotes = buildLickNotes(currentLick, lickRoot);
+      lickNoteIndex = 0;
+
+      const keyName = NOTE_NAMES[lickKeyOrder[lickKeyIndex]];
+      document.getElementById('intervalDisplay').textContent = `✓ Lick ${score}!`;
+
+      setTimeout(() => {
+        const keySpoken = keyName.replace('#', ' sharp').replace('b', ' flat');
+        speak(`${currentLick.name}, in ${keySpoken}`, () => {
+          playMelody(lickNotes, () => {
+            updateDisplay();
+            roundStart = performance.now();
+            animFrame = requestAnimationFrame(gameLoop);
+          });
+        });
+      }, 800);
+    } else {
+      // Next note in lick
+      updateDisplay();
+      roundStart = performance.now();
+      animFrame = requestAnimationFrame(gameLoop);
+    }
     return;
   }
 
@@ -3159,6 +3404,22 @@ function endGame() {
       bestEl.className = 'go-best go-new-best';
     } else {
       bestEl.textContent = `BEST: ${hiScoreScale}`;
+      bestEl.className = 'go-best';
+    }
+  } else if (gameMode === 'licks') {
+    const isNewBest = score > hiScoreLick;
+    if (isNewBest) {
+      hiScoreLick = score;
+      localStorage.setItem('notechaser_hi_lick', hiScoreLick);
+    }
+    document.getElementById('goScore').textContent = score;
+    document.getElementById('goScoreLabel').textContent = 'Licks Nailed';
+    const bestEl = document.getElementById('goBest');
+    if (isNewBest && score > 0) {
+      bestEl.textContent = 'NEW BEST!';
+      bestEl.className = 'go-best go-new-best';
+    } else {
+      bestEl.textContent = `BEST: ${hiScoreLick}`;
       bestEl.className = 'go-best';
     }
   } else if (gameMode === 'melody' || gameMode === 'harmonic') {
