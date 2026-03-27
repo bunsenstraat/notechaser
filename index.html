@@ -1059,6 +1059,11 @@ body::before {
         <button class="dir-btn selected scale-dir-btn" data-sdir="down" onclick="toggleScaleDir('down')">&#9660; Down</button>
         <button class="dir-btn scale-dir-btn" data-sdir="both" onclick="toggleScaleDir('both')">&#9650;&#9660; Up &amp; Down</button>
       </div>
+      <div class="section-label" style="margin-top:12px">Range</div>
+      <div class="dir-row">
+        <button class="dir-btn selected scale-range-btn" data-srange="voice" onclick="setScaleRange(false)">&#127908; Voice</button>
+        <button class="dir-btn scale-range-btn" data-srange="wide" onclick="setScaleRange(true)">&#127929; Keyboard</button>
+      </div>
     </div>
 
     <div class="section-label">TIME PER NOTE</div>
@@ -1439,10 +1444,11 @@ let CONFIDENCE_THRESHOLD = 0.2;
 // Range helpers based on mode
 function isInstrumentMode() { return (gameMode === 'instrument' || gameMode === 'harmonic' || gameMode === 'chord' || gameMode === 'bass') && !(gameMode === 'chord' && chordPlayback === 'sing'); }
 function isChordSing() { return gameMode === 'chord' && chordPlayback === 'sing'; }
-function getRangeLow() { if (gameMode === 'bass') return BASS_RANGE_LOW; if (isChordSing()) return CHORD_SING_LOW; return isInstrumentMode() ? INST_RANGE_LOW : RANGE_LOW; }
-function getRangeHigh() { if (gameMode === 'bass') return BASS_RANGE_LOW + 12; if (isChordSing()) return CHORD_SING_LOW + 8; return isInstrumentMode() ? INST_RANGE_HIGH : RANGE_HIGH; }
-function getRangeAbsLow() { if (gameMode === 'bass') return BASS_RANGE_LOW; if (isChordSing()) return CHORD_SING_LOW; return isInstrumentMode() ? INST_RANGE_ABS_LOW : RANGE_ABS_LOW; }
-function getRangeAbsHigh() { if (gameMode === 'bass') return BASS_RANGE_HIGH; if (isChordSing()) return CHORD_SING_HIGH; return isInstrumentMode() ? INST_RANGE_ABS_HIGH : RANGE_ABS_HIGH; }
+function isScaleWide() { return gameMode === 'scale' && scaleRangeWide; }
+function getRangeLow() { if (gameMode === 'bass') return BASS_RANGE_LOW; if (isChordSing()) return CHORD_SING_LOW; if (isScaleWide()) return INST_RANGE_LOW; return isInstrumentMode() ? INST_RANGE_LOW : RANGE_LOW; }
+function getRangeHigh() { if (gameMode === 'bass') return BASS_RANGE_LOW + 12; if (isChordSing()) return CHORD_SING_LOW + 8; if (isScaleWide()) return INST_RANGE_HIGH; return isInstrumentMode() ? INST_RANGE_HIGH : RANGE_HIGH; }
+function getRangeAbsLow() { if (gameMode === 'bass') return BASS_RANGE_LOW; if (isChordSing()) return CHORD_SING_LOW; if (isScaleWide()) return INST_RANGE_ABS_LOW; return isInstrumentMode() ? INST_RANGE_ABS_LOW : RANGE_ABS_LOW; }
+function getRangeAbsHigh() { if (gameMode === 'bass') return BASS_RANGE_HIGH; if (isChordSing()) return CHORD_SING_HIGH; if (isScaleWide()) return INST_RANGE_ABS_HIGH; return isInstrumentMode() ? INST_RANGE_ABS_HIGH : RANGE_ABS_HIGH; }
 
 // ── STATE ──
 let selectedIntervals = new Set();
@@ -1494,6 +1500,7 @@ let currentScaleForSing = null;
 let scaleRoot = null;
 let scaleDirUp = true, scaleDirDown = true, scaleDirBoth = false;
 let scaleCurrentDir = 'up'; // tracks actual direction for voice announcement
+let scaleRangeWide = false; // false = vocal range, true = instrument/keyboard range
 let hiScoreScale = parseInt(localStorage.getItem('notechaser_hi_scale') || '0');
 
 let audioCtx = null;
@@ -1682,8 +1689,15 @@ function toggleScaleDir(d) {
   });
 }
 
+function setScaleRange(wide) {
+  scaleRangeWide = wide;
+  document.querySelectorAll('.scale-range-btn').forEach(b => {
+    b.classList.toggle('selected', (b.dataset.srange === 'wide') === wide);
+  });
+}
+
 function buildScaleNotes(rootMidi, scale) {
-  // Build the scale notes within vocal range
+  // Build the scale notes
   let notes = [];
   // ascending: root + each interval
   const ascending = scale.intervals.map(s => rootMidi + s);
