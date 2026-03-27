@@ -1092,6 +1092,17 @@ body::before {
         <button class="preset-btn lick-cycle-btn" data-lcycle="6" onclick="setLickCycle(6)">6 keys</button>
         <button class="preset-btn lick-cycle-btn" data-lcycle="12" onclick="setLickCycle(12)">All 12</button>
       </div>
+      <div class="section-label" style="margin-top:12px">Feel</div>
+      <div class="dir-row">
+        <button class="dir-btn selected lick-feel-btn" data-feel="straight" onclick="setLickFeel('straight')">Straight</button>
+        <button class="dir-btn lick-feel-btn" data-feel="swing" onclick="setLickFeel('swing')">&#127927; Swing</button>
+        <button class="dir-btn lick-feel-btn" data-feel="hard" onclick="setLickFeel('hard')">&#128293; Hard Swing</button>
+      </div>
+      <div class="section-label" style="margin-top:12px">Tempo</div>
+      <div class="time-slider-wrap">
+        <input type="range" id="lickTempoSlider" class="time-slider" min="80" max="240" value="140" step="10" oninput="updateLickTempoLabel()">
+        <div class="time-label" id="lickTempoLabel">140 BPM</div>
+      </div>
     </div>
 
     <div class="section-label">TIME PER NOTE</div>
@@ -1368,7 +1379,7 @@ const LICKS = [
   { name: 'ii-V Lick #3', cat: 'ii-V', notes: [0, 2, 3, 5, 7, 9, 7, 5, 4, 2, 0] },
   { name: 'Coltrane', cat: 'advanced', notes: [0, 4, 7, 11, 14, 11, 7, 4, 0] },
   { name: 'Digital Pattern', cat: 'advanced', notes: [0, 2, 4, 7, 2, 4, 7, 9] },
-  { name: 'Pentatonic Run', cat: 'advanced', notes: [0, 2, 4, 7, 9, 12, 9, 7, 4, 2, 0] },
+  { name: 'Pentatonic Run', cat: 'advanced', notes: [0, 2, 4, 7, 9, 12, 9, 7, 4, 2, 0] }
 ];
 
 const VOICINGS = {
@@ -1531,6 +1542,8 @@ let lickRoot = null;
 let lickKeysPlayed = 0; // how many keys done for current lick
 let lickKeyOrder = []; // shuffled key order
 let lickKeyIndex = 0;
+let lickFeel = 'straight'; // 'straight', 'swing', 'hard'
+let lickBPM = 140;
 let hiScoreLick = parseInt(localStorage.getItem('notechaser_hi_lick') || '0');
 
 // Harmonic mode state
@@ -1783,6 +1796,18 @@ function setLickCycle(n) {
   });
 }
 
+function setLickFeel(feel) {
+  lickFeel = feel;
+  document.querySelectorAll('.lick-feel-btn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.feel === feel);
+  });
+}
+
+function updateLickTempoLabel() {
+  lickBPM = parseInt(document.getElementById('lickTempoSlider').value);
+  document.getElementById('lickTempoLabel').textContent = lickBPM + ' BPM';
+}
+
 function shuffleKeys() {
   // Shuffle array of 0-11 (pitch classes)
   const keys = Array.from({length: 12}, (_, i) => i);
@@ -2025,7 +2050,7 @@ function replayBaseNote() {
       setTimeout(() => { roundStart = performance.now(); }, 1000);
     });
   } else if (gameMode === 'licks') {
-    playMelody(lickNotes, () => {
+    playLick(lickNotes, () => {
       updateDisplay();
       roundStart = performance.now();
     });
@@ -2415,6 +2440,43 @@ function playMelody(notes, callback) {
     melodyPlaying = false;
     if (callback) callback();
   }, notes.length * spacing);
+}
+
+function playLick(notes, callback) {
+  melodyPlaying = true;
+  // Eighth note duration from BPM: one beat = 60/BPM seconds, eighth = half a beat
+  const eighthMs = (60 / lickBPM) * 1000 / 2;
+  // Swing ratios: straight = 1:1, swing = ~2:1 (triplet), hard = 3:1
+  const swingRatio = lickFeel === 'hard' ? 0.75 : lickFeel === 'swing' ? 0.667 : 0.5;
+  // Duration of each note (slightly shorter than spacing for articulation)
+  const noteDur = eighthMs * 1.8 / 1000; // in seconds for playNote
+
+  // Calculate timing for each note with swing
+  const times = [];
+  let t = 0;
+  for (let i = 0; i < notes.length; i++) {
+    times.push(t);
+    // Swing: long-short pattern on pairs of eighth notes
+    if (i % 2 === 0) {
+      t += eighthMs * 2 * swingRatio; // long
+    } else {
+      t += eighthMs * 2 * (1 - swingRatio); // short
+    }
+  }
+
+  notes.forEach((midi, i) => {
+    setTimeout(() => {
+      playNote(midi, noteDur);
+      updatePianoHighlights(null, midi, null);
+      document.getElementById('intervalDisplay').textContent = `Listen... ${i + 1}/${notes.length}`;
+    }, times[i]);
+  });
+
+  const totalTime = times[times.length - 1] + eighthMs * 2;
+  setTimeout(() => {
+    melodyPlaying = false;
+    if (callback) callback();
+  }, totalTime);
 }
 
 // ── CHORD MODE HELPERS ──
@@ -2820,7 +2882,7 @@ async function startGame() {
     setTimeout(() => {
       const keyName = NOTE_NAMES[lickKeyOrder[lickKeyIndex]].replace('#', ' sharp').replace('b', ' flat');
       speak(`${currentLick.name}, in ${keyName}`, () => {
-        playMelody(lickNotes, () => {
+        playLick(lickNotes, () => {
           updateDisplay();
           gameActive = true;
           roundStart = performance.now();
@@ -3187,7 +3249,7 @@ function onSuccess() {
       setTimeout(() => {
         const keySpoken = keyName.replace('#', ' sharp').replace('b', ' flat');
         speak(`${currentLick.name}, in ${keySpoken}`, () => {
-          playMelody(lickNotes, () => {
+          playLick(lickNotes, () => {
             updateDisplay();
             roundStart = performance.now();
             animFrame = requestAnimationFrame(gameLoop);
