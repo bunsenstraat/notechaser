@@ -1417,7 +1417,7 @@ const CHORD_TYPES = [
   { name: 'Kenny B.',     short: 'KB',     intervals: iv('1 4 b7 9 12'),    cat: 'quartal' },
   { name: 'RL Maj Q13',   short: 'Q6',     intervals: [-1,4,9,14],          cat: 'quartal' },
   { name: 'RL Dom Q13',   short: 'Q6dom',  intervals: [-2,4,9,14],          cat: 'quartal' },
-  { name: 'RL Dom Q♭13',  short: 'Q6b13',  intervals: [-2,4,8,14],          cat: 'quartal' },
+  { name: 'RL Dom Qb13',  short: 'Q6b13',  intervals: [-2,4,8,14],          cat: 'quartal' },
   { name: 'RL min 6',     short: 'Qm6',    intervals: [-2,3,9,14],          cat: 'quartal' },
 ];
 
@@ -2866,7 +2866,11 @@ function playChordForMode(rootMidi, intervals, callback) {
       'Quartal 5':'Quartal 5 note', 'So What':'So What voicing',
       'Kenny B.':'Kenny Barron voicing',
     'Rootless Maj Quartal 13': 'Rootless Major Quartal 13', 'Rootless Dom Quartal 13': 'Rootless Dominant Quartal 13',
-    'Rootless Min Quartal 13': 'Rootless Minor Quartal 13'};
+    'Rootless Min Quartal 13': 'Rootless Minor Quartal 13',
+    'RL Maj Q13': 'Rootless Major Quartal 13', 'RL Dom Q13': 'Rootless Dominant Quartal 13', 'RL Min Q13': 'Rootless Minor Quartal 13',
+    'RL Dom Qb13':'Rootless Dominant Quartal flat 13',
+  }
+  ;
     const spokenName = speechMap[currentChordType.name] || currentChordType.name;
     const chordLabel = rootLabel + ' ' + spokenName;
     speak(chordLabel, () => {
