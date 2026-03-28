@@ -1418,6 +1418,7 @@ const CHORD_TYPES = [
   { name: 'RL Maj Q13',   short: 'Q6',     intervals: [-1,4,9,14],          cat: 'quartal' },
   { name: 'RL Dom Q13',   short: 'Q6dom',  intervals: [-2,4,9,14],          cat: 'quartal' },
   { name: 'RL Dom Qb13',  short: 'Q6b13',  intervals: [-2,4,8,14],          cat: 'quartal' },
+  { name: 'RL Dom Qb13b9',  short: 'Q6b13b9',  intervals: [-2,4,8,13],          cat: 'quartal' },
   { name: 'RL min 6',     short: 'Qm6',    intervals: [-2,3,9,14],          cat: 'quartal' },
 ];
 
@@ -2869,6 +2870,7 @@ function playChordForMode(rootMidi, intervals, callback) {
     'Rootless Min Quartal 13': 'Rootless Minor Quartal 13',
     'RL Maj Q13': 'Rootless Major Quartal 13', 'RL Dom Q13': 'Rootless Dominant Quartal 13', 'RL Min Q13': 'Rootless Minor Quartal 13',
     'RL Dom Qb13':'Rootless Dominant Quartal flat 13',
+    'RL Dom Qb13b9':'Rootless Dominant Quartal flat 13 flat 9',
   }
   ;
     const spokenName = speechMap[currentChordType.name] || currentChordType.name;
