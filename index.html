@@ -1025,6 +1025,7 @@ body::before {
         <button class="dir-btn selected chord-play-btn" data-cplay="arpeggio" onclick="setChordPlayback('arpeggio')">&#127926; Arpeggio + Stack</button>
         <button class="dir-btn chord-play-btn" data-cplay="stack" onclick="setChordPlayback('stack')">&#127927; Stack Only</button>
         <button class="dir-btn chord-play-btn" data-cplay="sing" onclick="setChordPlayback('sing')">&#127908; Sing</button>
+        <button class="dir-btn chord-play-btn" data-cplay="call" onclick="setChordPlayback('call')">&#127929; Call &amp; Play</button>
       </div>
     </div>
 
@@ -1381,6 +1382,9 @@ const CHORD_TYPES = [
   { name: 'Quartal 5',    short: 'Q5',     intervals: [0,5,10,15,20], cat: 'quartal' },
   { name: 'So What',      short: 'SW',     intervals: [0,5,10,15,19], cat: 'quartal' },
   { name: 'Kenny B.',     short: 'KB',     intervals: [0,5,10,14,19], cat: 'quartal' },
+  { name: 'Rootless Maj Quartal 13',    short: 'Q6',     intervals: [-1,4,9],    cat: 'quartal' },
+  { name: 'Rootless Dom Quartal 13',    short: 'Q6dom',   intervals: [-2,4,9],    cat: 'quartal' },
+  { name: 'Rootless Dom Quartal b13',    short: 'Q6domb13',   intervals: [-2,4,8],    cat: 'quartal' },
 ];
 
 // Jazz chord voicing qualities (Type A = 3rd on bottom, Type B = 7th on bottom)
@@ -1538,6 +1542,8 @@ let CONFIDENCE_THRESHOLD = 0.2;
 // Range helpers based on mode
 function isInstrumentMode() { return (gameMode === 'instrument' || gameMode === 'harmonic' || gameMode === 'chord' || gameMode === 'bass') && !(gameMode === 'chord' && chordPlayback === 'sing'); }
 function isChordSing() { return gameMode === 'chord' && chordPlayback === 'sing'; }
+function isChordCall() { return gameMode === 'chord' && chordPlayback === 'call'; }
+function isChordVoiceMode() { return isChordSing() || isChordCall(); }
 function isScaleWide() { return gameMode === 'scale' && scaleRangeWide; }
 function isLickWide() { return gameMode === 'licks' && lickRangeWide; }
 function getRangeLow() { if (gameMode === 'bass') return BASS_RANGE_LOW; if (isChordSing()) return CHORD_SING_LOW; if (isScaleWide() || isLickWide()) return INST_RANGE_LOW; return isInstrumentMode() ? INST_RANGE_LOW : RANGE_LOW; }
@@ -2030,7 +2036,7 @@ buildPiano();
 
 // ── REPLAY BASE NOTE ──
 function playAnswer() {
-  if (!gameActive || melodyPlaying || !isChordSing()) return;
+  if (!gameActive || melodyPlaying || !isChordVoiceMode()) return;
   melodyPlaying = true;
   // Play all chord tones as arpeggio so the user can hear each note
   const notes = currentChordType.intervals.map(s => chordRoot + s);
@@ -2536,7 +2542,7 @@ function chooseNextChord() {
 }
 
 function updateChordPiano(singingMidi) {
-  const showTargets = isChordSing(); // only show target notes in sing mode
+  const showTargets = isChordVoiceMode(); // only show target notes in voice modes (sing/call)
   document.querySelectorAll('.piano-key').forEach(k => {
     k.classList.remove('active-from', 'active-target', 'active-singing');
     const m = parseInt(k.dataset.midi);
@@ -2689,7 +2695,7 @@ function updateDisplay() {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreChord}`;
     const remaining = chordTargetNotes.size;
     const total = currentChordType.intervals.length;
-    if (isChordSing()) {
+    if (isChordVoiceMode()) {
       document.getElementById('intervalDisplay').textContent = `${currentChordType.name} — ${remaining} note${remaining !== 1 ? 's' : ''} left`;
       document.getElementById('noteFrom').textContent = `Root: ${midiToName(chordRoot)}`;
     } else {
@@ -2699,7 +2705,7 @@ function updateDisplay() {
     document.getElementById('noteTarget').textContent = `${chordHitNotes.size}/${total}`;
     document.getElementById('arrowDir').innerHTML = '&#127927;';
     document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay chord';
-    document.getElementById('answerBtn').style.display = isChordSing() ? '' : 'none';
+    document.getElementById('answerBtn').style.display = isChordVoiceMode() ? '' : 'none';
     updateChordPiano(null);
   } else if (gameMode === 'melody' || gameMode === 'harmonic') {
     const hi = gameMode === 'harmonic' ? hiScoreHarmonic : hiScoreMelody;
@@ -2773,7 +2779,7 @@ function setChordPlayback(mode) {
 }
 
 function playChordForMode(rootMidi, intervals, callback) {
-  if (chordPlayback === 'sing') {
+  if (chordPlayback === 'sing' || chordPlayback === 'call') {
     // Sing mode — voice-announce chord name, play only the root
     melodyPlaying = true;
     const rootLabel = midiToName(rootMidi).replace('#', ' sharp').replace('b', ' flat');
@@ -2792,7 +2798,9 @@ function playChordForMode(rootMidi, intervals, callback) {
       'Min7 Shell':'Minor 7, shell', 'Min7♭5 Shell':'Minor 7 flat 5, shell',
       'Quartal 3':'Quartal 3 note', 'Quartal 4':'Quartal 4 note',
       'Quartal 5':'Quartal 5 note', 'So What':'So What voicing',
-      'Kenny B.':'Kenny Barron voicing' };
+      'Kenny B.':'Kenny Barron voicing',
+    'Rootless Maj Quartal 13': 'Rootless Major Quartal 13', 'Rootless Dom Quartal 13': 'Rootless Dominant Quartal 13',
+    'Rootless Min Quartal 13': 'Rootless Minor Quartal 13'};
     const spokenName = speechMap[currentChordType.name] || currentChordType.name;
     const chordLabel = rootLabel + ' ' + spokenName;
     speak(chordLabel, () => {
@@ -2883,7 +2891,7 @@ async function startGame() {
           gameLoop();
         });
       };
-      if (chordPlayback === 'sing') {
+      if (chordPlayback === 'sing' || chordPlayback === 'call') {
         startPlayingChord(); // sing mode announces chord name itself
       } else {
         const rootName = midiToName(chordRoot).replace('#', ' sharp').replace('b', ' flat');
@@ -3247,7 +3255,7 @@ function onSuccess() {
     };
 
     setTimeout(() => {
-      if (rootChanged && chordPlayback !== 'sing') {
+      if (rootChanged && chordPlayback !== 'sing' && chordPlayback !== 'call') {
         const rootName = midiToName(chordRoot).replace('#', ' sharp').replace('b', ' flat');
         speak(rootName, playNext);
       } else {
