@@ -2520,7 +2520,15 @@ function pickChordRoot() {
 
 function chooseNextChord() {
   const indices = [...selectedChords];
-  const idx = indices[Math.floor(Math.random() * indices.length)];
+  let idx;
+  if (indices.length > 1 && currentChordType) {
+    // Avoid repeating the same chord type
+    const lastIdx = CHORD_TYPES.indexOf(currentChordType);
+    const filtered = indices.filter(i => i !== lastIdx);
+    idx = filtered[Math.floor(Math.random() * filtered.length)];
+  } else {
+    idx = indices[Math.floor(Math.random() * indices.length)];
+  }
   currentChordType = CHORD_TYPES[idx];
   chordTargetNotes = new Set(currentChordType.intervals.map(s => chordRoot + s));
   chordHitNotes = new Set();
