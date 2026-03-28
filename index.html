@@ -2541,30 +2541,44 @@ function playLick(notes, callback) {
 }
 
 // ── CHORD MODE HELPERS ──
-function pickChordRoot() {
-  // Pick a root that lets the biggest chord fit in range
-  const maxInterval = Math.max(...[...selectedChords].map(i => Math.max(...CHORD_TYPES[i].intervals)));
-  const minInterval = Math.min(...[...selectedChords].map(i => Math.min(...CHORD_TYPES[i].intervals)));
-  const maxRoot = getRangeAbsHigh() - maxInterval;
-  const minRoot = getRangeAbsLow() - minInterval; // handles rootless voicings where lowest note > 0
+function pickChordRootFor(chordType) {
+  // Pick a root that lets this specific chord fit in range
+  const maxIv = Math.max(...chordType.intervals);
+  const minIv = Math.min(...chordType.intervals);
+  const maxRoot = getRangeAbsHigh() - maxIv;
+  const minRoot = getRangeAbsLow() - minIv;
   const lo = Math.max(getRangeLow(), minRoot);
   const hi = Math.min(getRangeHigh(), maxRoot);
   if (hi < lo) return lo; // fallback
   return Math.floor(Math.random() * (hi - lo + 1)) + lo;
 }
 
+function chordFitsRoot(chordType, root) {
+  // Check if all notes of this chord fit within the absolute range
+  const lo = getRangeAbsLow();
+  const hi = getRangeAbsHigh();
+  return chordType.intervals.every(iv => root + iv >= lo && root + iv <= hi);
+}
+
 function chooseNextChord() {
   const indices = [...selectedChords];
-  let idx;
+  let candidates = indices;
   if (indices.length > 1 && currentChordType) {
     // Avoid repeating the same chord type
     const lastIdx = CHORD_TYPES.indexOf(currentChordType);
-    const filtered = indices.filter(i => i !== lastIdx);
-    idx = filtered[Math.floor(Math.random() * filtered.length)];
-  } else {
-    idx = indices[Math.floor(Math.random() * indices.length)];
+    candidates = indices.filter(i => i !== lastIdx);
   }
-  currentChordType = CHORD_TYPES[idx];
+  // Prefer chords that fit the current root
+  let fittingCandidates = candidates.filter(i => chordFitsRoot(CHORD_TYPES[i], chordRoot));
+  if (fittingCandidates.length === 0) {
+    // No chord fits this root — pick any chord and adjust root
+    const idx = candidates[Math.floor(Math.random() * candidates.length)];
+    currentChordType = CHORD_TYPES[idx];
+    chordRoot = pickChordRootFor(currentChordType);
+  } else {
+    const idx = fittingCandidates[Math.floor(Math.random() * fittingCandidates.length)];
+    currentChordType = CHORD_TYPES[idx];
+  }
   chordTargetNotes = new Set(currentChordType.intervals.map(s => chordRoot + s));
   chordHitNotes = new Set();
   holdingForMidi = null;
@@ -2905,11 +2919,16 @@ async function startGame() {
       }
     }, 400);
   } else if (gameMode === 'chord') {
-    chordRoot = pickChordRoot();
+    // Pick first chord, then find a root that fits
+    const firstIdx = [...selectedChords][Math.floor(Math.random() * selectedChords.size)];
+    currentChordType = CHORD_TYPES[firstIdx];
+    chordRoot = pickChordRootFor(currentChordType);
+    chordTargetNotes = new Set(currentChordType.intervals.map(s => chordRoot + s));
+    chordHitNotes = new Set();
+    holdingForMidi = null;
     chordRoundsOnRoot = 0;
     score = 0;
     buildPiano();
-    chooseNextChord();
     updateDisplay();
 
     setTimeout(() => {
@@ -3267,13 +3286,14 @@ function onSuccess() {
 
     chordRoundsOnRoot++;
     let rootChanged = false;
+    chooseNextChord(); // pick chord first, may adjust root if needed
     if (chordRoundsOnRoot >= chordRoundsPerRoot) {
-      chordRoot = pickChordRoot();
+      chordRoot = pickChordRootFor(currentChordType);
+      chordTargetNotes = new Set(currentChordType.intervals.map(s => chordRoot + s));
+      chordHitNotes = new Set();
       chordRoundsOnRoot = 0;
       rootChanged = true;
     }
-
-    chooseNextChord();
     updateDisplay();
 
     const playNext = () => {
