@@ -257,4 +257,61 @@ const PROGRESSIONS = [
   },
 ];
 
+// ── SPEECH MAP (human-readable pronunciation for TTS) ──
+const SPEECH_MAP = {
+  // Chord types
+  'Major':'Major', 'Minor':'Minor', 'Diminished':'Diminished', 'Augmented':'Augmented',
+  'Sus2':'Suspended 2', 'Sus4':'Suspended 4', 'Maj7':'Major 7', 'Dom7':'Dominant 7',
+  'Min7':'Minor 7', 'Min(Maj7)':'Minor Major 7', 'Dim7':'Diminished 7',
+  'Half-Dim7':'Half Diminished 7', 'Aug7':'Augmented 7', '9':'Dominant 9',
+  'min9':'Minor 9', 'Maj9':'Major 9',
+  // Rootless A
+  'Maj7 RL-A':'Major 7, rootless A', 'Dom7 RL-A':'Dominant 7, rootless A',
+  'Dom7 RL-A 13':'Dominant 7 13, rootless A',
+  'Min7 RL-A':'Minor 7, rootless A',
+  'Min7 RL-A 11':'Minor 7 11, rootless A',
+  'Min7♭5 RL-A':'Minor 7 flat 5, rootless A',
+  'Dom9 RL-A':'Dominant 9, rootless A',
+  // Rootless B
+  'Maj7 RL-B':'Major 7, rootless B', 'Dom7 RL-B':'Dominant 7, rootless B',
+  'Dom7 RL-B 13':'Dominant 7 13, rootless B',
+  'Dom7 RL-B 13 wide':'Dominant 7 13 wide, rootless B',
+  'Min7 RL-B':'Minor 7, rootless B', 'Min7 RL-B 11':'Minor 7 11, rootless B',
+  'Min7♭5 RL-B':'Minor 7 flat 5, rootless B',
+  'Dom9 RL-B':'Dominant 9, rootless B',
+  // Shells
+  'Maj7 Shell':'Major 7, shell', 'Dom7 Shell':'Dominant 7, shell',
+  'Min7 Shell':'Minor 7, shell', 'Min7♭5 Shell':'Minor 7 flat 5, shell',
+  // Quartal
+  'Quartal 3':'Quartal 3 note', 'Quartal 4':'Quartal 4 note',
+  'Quartal 5':'Quartal 5 note', 'So What':'So What voicing',
+  'Kenny B.':'Kenny Barron voicing',
+  'Rootless Maj Quartal 13':'Rootless Major Quartal 13',
+  'Rootless Dom Quartal 13':'Rootless Dominant Quartal 13',
+  'Rootless Min Quartal 13':'Rootless Minor Quartal 13',
+  'RL Maj Q13':'Rootless Major Quartal 13',
+  'RL Dom Q13':'Rootless Dominant Quartal 13',
+  'RL Min Q13':'Rootless Minor Quartal 13',
+  'RL Dom Qb13':'Rootless Dominant Quartal flat 13',
+  'RL Dom Qb13b9':'Rootless Dominant Quartal flat 13 flat 9',
+  // Progressions & cadences
+  'ii-V-I':'two five one',
+  'ii-V-I in A':'two five one, type A',
+  'ii-V-I in B':'two five one, type B',
+  'Turnaround':'turnaround',
+  'Minor ii-V-i':'minor two five one',
+  'Rhythm Bridge':'rhythm bridge',
+  'ii-V':'two five',
+  'Plagal':'plagal',
+  'IMaj7':'one major 7',
+  'Im7':'one minor 7',
+  'V7':'five dominant 7',
+  'iim7':'two minor 7',
+};
+
+// Helper: look up speech-friendly name, with note name sharpening
+function speechify(text) {
+  return (SPEECH_MAP[text] || text).replace(/#/g, ' sharp').replace(/♭/g, ' flat');
+}
+
 // MIDI note helpers: A4 = 69 = 440Hz
