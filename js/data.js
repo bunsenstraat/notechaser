@@ -236,4 +236,25 @@ const CADENCES = [
   },
 ];
 
+// ── CHORD PROGRESSIONS (for MIDI voicing practice) ──
+// Each chord references a CHORD_TYPES entry by name + a degree root
+const PROGRESSIONS = [
+  {
+    name: 'ii-V-I in A', short: 'ii⁷→V⁷→I△ (A)', cat: 'major',
+    chords: [
+      { degRoot: 2, chordName: 'Min7 RL-A' },
+      { degRoot: 7, chordName: 'Dom7 RL-A' },
+      { degRoot: 0, chordName: 'Maj7 RL-A' },
+    ]
+  },
+  {
+    name: 'ii-V-I in B', short: 'ii⁷→V⁷→I△ (B)', cat: 'major',
+    chords: [
+      { degRoot: 2, chordName: 'Min7 RL-B' },
+      { degRoot: 7, chordName: 'Dom7 RL-B' },
+      { degRoot: 0, chordName: 'Maj7 RL-B' },
+    ]
+  },
+];
+
 // MIDI note helpers: A4 = 69 = 440Hz

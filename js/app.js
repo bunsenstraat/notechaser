@@ -45,7 +45,7 @@ let RMS_THRESHOLD = 0.005;
 let CONFIDENCE_THRESHOLD = 0.2;
 
 // Range helpers based on mode
-function isInstrumentMode() { return (gameMode === 'instrument' || gameMode === 'harmonic' || gameMode === 'chord' || gameMode === 'bass') && !(gameMode === 'chord' && chordPlayback === 'sing'); }
+function isInstrumentMode() { return (gameMode === 'instrument' || gameMode === 'harmonic' || gameMode === 'chord' || gameMode === 'bass' || gameMode === 'progression') && !(gameMode === 'chord' && chordPlayback === 'sing'); }
 function isChordSing() { return gameMode === 'chord' && chordPlayback === 'sing'; }
 function isChordCall() { return gameMode === 'chord' && chordPlayback === 'call'; }
 function isChordVoiceMode() { return isChordSing() || isChordCall(); }
@@ -103,21 +103,46 @@ function onMidiNoteChange() {
 
   if (gameMode === 'chord') {
     // Chord mode: check if held notes match all target notes
-    // Show what's being played on piano
     updateChordPiano(null, midiHeldNotes);
     updateMidiChordDisplay();
 
-    // Check if all target notes are held (allow extra notes)
     let allHit = true;
     for (const t of chordTargetNotes) {
       if (!midiHeldNotes.has(t)) { allHit = false; break; }
     }
     if (allHit && chordTargetNotes.size > 0) {
-      // All chord tones played simultaneously!
       chordHitNotes = new Set(chordTargetNotes);
       chordTargetNotes = new Set();
       updateDisplay();
       onSuccess();
+    }
+  } else if (gameMode === 'progression') {
+    // Progression mode: check if held notes match current chord target
+    updateProgressionPiano();
+    updateMidiChordDisplay();
+
+    let allHit = true;
+    for (const t of progTargetNotes) {
+      if (!midiHeldNotes.has(t)) { allHit = false; break; }
+    }
+    if (allHit && progTargetNotes.size > 0) {
+      progHitNotes = new Set(progTargetNotes);
+      progTargetNotes = new Set();
+      playChordConfirmBeep();
+      updateDisplay();
+
+      // Move to next chord in progression
+      progChordIndex++;
+      if (progChordIndex >= currentProgression.chords.length) {
+        // Progression complete!
+        onSuccess();
+      } else {
+        // Set up next chord, reset timer
+        setupProgChord();
+        buildPiano();
+        updateDisplay();
+        roundStart = performance.now();
+      }
     }
   } else {
     // Single note modes: use the latest note played
@@ -203,6 +228,17 @@ let lickKeyIndex = 0;
 let lickFeel = 'straight'; // 'straight', 'swing', 'hard'
 let lickBPM = 140;
 let hiScoreLick = parseInt(localStorage.getItem('notechaser_hi_lick') || '0');
+
+// Progression mode state
+let selectedProgressions = new Set();
+let currentProgression = null;
+let progChordIndex = 0;        // which chord in the progression we're on
+let progKeyRoot = 0;           // pitch class of the key (0=C, 1=C#, etc.)
+let progCurrentChordType = null; // the CHORD_TYPES entry for current chord
+let progCurrentRoot = null;    // MIDI root of the current chord
+let progTargetNotes = new Set();
+let progHitNotes = new Set();
+let hiScoreProgression = parseInt(localStorage.getItem('notechaser_hi_progression') || '0');
 
 // Harmonic mode state
 let selectedScale = null;
@@ -494,6 +530,43 @@ function pickLickRoot(pitchClass) {
   return root >= lo ? root : root + 12;
 }
 
+// Build progression grid
+const progressionGrid = document.getElementById('progressionGrid');
+PROGRESSIONS.forEach((prog, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'scale-btn progression-btn';
+  btn.innerHTML = `${prog.name}<span class="chord-label">${prog.short}</span>`;
+  btn.dataset.idx = i;
+  btn.addEventListener('click', () => {
+    if (selectedProgressions.has(i)) {
+      selectedProgressions.delete(i);
+      btn.classList.remove('selected');
+    } else {
+      selectedProgressions.add(i);
+      btn.classList.add('selected');
+    }
+    updateStartBtn();
+  });
+  progressionGrid.appendChild(btn);
+});
+
+function progressionPreset(p) {
+  const btns = progressionGrid.querySelectorAll('.progression-btn');
+  selectedProgressions.clear();
+  btns.forEach(b => b.classList.remove('selected'));
+  if (p === 'all') {
+    PROGRESSIONS.forEach((_, i) => { selectedProgressions.add(i); btns[i].classList.add('selected'); });
+  } else if (p !== 'none') {
+    PROGRESSIONS.forEach((pr, i) => { if (pr.cat === p) { selectedProgressions.add(i); btns[i].classList.add('selected'); } });
+  }
+  updateStartBtn();
+}
+
+// Resolve a progression chord name to a CHORD_TYPES entry
+function resolveChordType(chordName) {
+  return CHORD_TYPES.find(ct => ct.name === chordName);
+}
+
 function toggleScaleDir(d) {
   if (d === 'both') {
     scaleDirBoth = !scaleDirBoth;
@@ -584,13 +657,15 @@ function setMode(m) {
   const isBass = (m === 'bass');
   const isScale = (m === 'scale');
   const isLicks = (m === 'licks');
+  const isProgression = (m === 'progression');
   const isMelody = (m === 'melody' || m === 'harmonic');
-  document.getElementById('intervalSetup').style.display = (isHarmonic || isChord || isBass || isScale || isLicks) ? 'none' : '';
+  document.getElementById('intervalSetup').style.display = (isHarmonic || isChord || isBass || isScale || isLicks || isProgression) ? 'none' : '';
   document.getElementById('scaleSetup').style.display = isHarmonic ? '' : 'none';
   document.getElementById('chordSetup').style.display = isChord ? '' : 'none';
   document.getElementById('bassSetup').style.display = isBass ? '' : 'none';
   document.getElementById('scaleSingSetup').style.display = isScale ? '' : 'none';
   document.getElementById('licksSetup').style.display = isLicks ? '' : 'none';
+  document.getElementById('progressionSetup').style.display = isProgression ? '' : 'none';
   document.querySelectorAll('.melody-only-setting').forEach(el => {
     el.style.display = isMelody ? '' : 'none';
   });
@@ -633,6 +708,8 @@ function updateStartBtn() {
     document.getElementById('startBtn').disabled = selectedScalesForSing.size === 0;
   } else if (gameMode === 'licks') {
     document.getElementById('startBtn').disabled = selectedLicks.size === 0;
+  } else if (gameMode === 'progression') {
+    document.getElementById('startBtn').disabled = selectedProgressions.size === 0;
   } else {
     document.getElementById('startBtn').disabled = selectedIntervals.size === 0;
   }
@@ -654,6 +731,13 @@ function buildPiano() {
     lo = Math.min(lo, voiceLo);
     hi = Math.max(hi, voiceHi);
   }
+  // In progression mode, ensure piano covers voicing notes
+  if (gameMode === 'progression' && progCurrentRoot !== null && progCurrentChordType) {
+    const voiceLo = progCurrentRoot + Math.min(...progCurrentChordType.intervals);
+    const voiceHi = progCurrentRoot + Math.max(...progCurrentChordType.intervals);
+    lo = Math.min(lo, voiceLo);
+    hi = Math.max(hi, voiceHi);
+  }
   for (let midi = lo; midi <= hi; midi++) {
     const noteIdx = midi % 12;
     const isBlack = [1,3,6,8,10].includes(noteIdx);
@@ -667,10 +751,18 @@ buildPiano();
 
 // ── REPLAY BASE NOTE ──
 function playAnswer() {
-  if (!gameActive || melodyPlaying || !isChordVoiceMode()) return;
+  if (!gameActive || melodyPlaying) return;
+  let notes;
+  if (gameMode === 'progression') {
+    if (!progCurrentChordType || progCurrentRoot === null) return;
+    notes = progCurrentChordType.intervals.map(s => progCurrentRoot + s);
+  } else if (isChordVoiceMode()) {
+    notes = currentChordType.intervals.map(s => chordRoot + s);
+  } else {
+    return;
+  }
   melodyPlaying = true;
   // Play all chord tones as arpeggio so the user can hear each note
-  const notes = currentChordType.intervals.map(s => chordRoot + s);
   let i = 0;
   function playNext() {
     if (i < notes.length) {
@@ -717,6 +809,10 @@ function replayBaseNote() {
       updateDisplay();
       roundStart = performance.now();
     });
+  } else if (gameMode === 'progression') {
+    // Replay: play root note of current chord
+    playNote(progCurrentRoot, 1.0);
+    setTimeout(() => { roundStart = performance.now(); }, 1200);
   } else if (gameMode === 'melody') {
     playMelody(melodyNotes, () => {
       updateDisplay();
@@ -1204,6 +1300,26 @@ function updateChordPiano(singingMidi, heldMidiNotes) {
   });
 }
 
+// ── PROGRESSION MODE HELPERS ──
+function setupProgChord() {
+  const chordDef = currentProgression.chords[progChordIndex];
+  progCurrentChordType = resolveChordType(chordDef.chordName);
+  const chordRootPC = (progKeyRoot + chordDef.degRoot) % 12;
+  progCurrentRoot = placeChordRoot(chordRootPC, progCurrentChordType);
+  progTargetNotes = new Set(progCurrentChordType.intervals.map(s => progCurrentRoot + s));
+  progHitNotes = new Set();
+}
+
+function updateProgressionPiano() {
+  document.querySelectorAll('.piano-key').forEach(k => {
+    k.classList.remove('active-from', 'active-target', 'active-singing');
+    const m = parseInt(k.dataset.midi);
+    if (progHitNotes.has(m)) k.classList.add('active-singing');
+    if (progTargetNotes.has(m)) k.classList.add('active-target');
+    if (useMidi && midiHeldNotes.has(m)) k.classList.add('active-from');
+  });
+}
+
 function playChordConfirmBeep() {
   initAudio();
   const osc = audioCtx.createOscillator();
@@ -1393,6 +1509,17 @@ function updateDisplay() {
     document.getElementById('arrowDir').innerHTML = '&#127927;';
     document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay lick';
     updatePianoHighlights(null, lickNotes[lickNoteIndex], null);
+  } else if (gameMode === 'progression') {
+    document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreProgression}`;
+    const keyName = NOTE_NAMES[progKeyRoot];
+    const chordDef = currentProgression.chords[progChordIndex];
+    document.getElementById('intervalDisplay').textContent = `${currentProgression.name} in ${keyName}`;
+    document.getElementById('noteFrom').textContent = `Chord ${progChordIndex + 1}/${currentProgression.chords.length}: ${chordDef.chordName}`;
+    document.getElementById('noteTarget').textContent = `${NOTE_NAMES[(progKeyRoot + chordDef.degRoot) % 12]} root`;
+    document.getElementById('arrowDir').innerHTML = '&#127929;';
+    document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to hear root';
+    document.getElementById('answerBtn').style.display = '';
+    updateProgressionPiano();
   } else if (gameMode === 'instrument') {
     document.getElementById('intervalDisplay').textContent = 'Listen & Play';
     document.getElementById('noteFrom').textContent = '?';
@@ -1566,6 +1693,30 @@ async function startGame() {
         const rootName = midiToName(chordRoot).replace('#', ' sharp').replace('b', ' flat');
         speak(rootName, startPlayingChord);
       }
+    }, 400);
+  } else if (gameMode === 'progression') {
+    score = 0;
+    progChordIndex = 0;
+    progKeyRoot = Math.floor(Math.random() * 12);
+    // Pick random progression
+    const progIndices = [...selectedProgressions];
+    currentProgression = PROGRESSIONS[progIndices[Math.floor(Math.random() * progIndices.length)]];
+    setupProgChord();
+    buildPiano();
+    updateDisplay();
+
+    setTimeout(() => {
+      // Announce progression name and key
+      const keyName = NOTE_NAMES[progKeyRoot].replace('#', ' sharp').replace('b', ' flat');
+      speak(`${currentProgression.name}, in ${keyName}`, () => {
+        // Play the root note
+        playNote(progCurrentRoot, 1.0);
+        setTimeout(() => {
+          gameActive = true;
+          roundStart = performance.now();
+          gameLoop();
+        }, 1200);
+      });
     }, 400);
   } else if (gameMode === 'scale') {
     score = 0;
@@ -1940,6 +2091,41 @@ function onSuccess() {
     return;
   }
 
+  if (gameMode === 'progression') {
+    // Full progression completed!
+    cancelAnimationFrame(animFrame);
+    score++;
+    document.getElementById('scoreDisplay').textContent = score;
+    document.getElementById('streakDots').innerHTML = '';
+
+    const dot = document.createElement('div');
+    dot.className = 'streak-dot';
+    document.getElementById('streakDots').appendChild(dot);
+
+    // New key + maybe new progression
+    progKeyRoot = Math.floor(Math.random() * 12);
+    progChordIndex = 0;
+    const progIndices = [...selectedProgressions];
+    currentProgression = PROGRESSIONS[progIndices[Math.floor(Math.random() * progIndices.length)]];
+    setupProgChord();
+    buildPiano();
+
+    document.getElementById('intervalDisplay').textContent = `✓ Progression ${score}!`;
+
+    setTimeout(() => {
+      const keyName = NOTE_NAMES[progKeyRoot].replace('#', ' sharp').replace('b', ' flat');
+      speak(`${currentProgression.name}, in ${keyName}`, () => {
+        playNote(progCurrentRoot, 1.0);
+        setTimeout(() => {
+          updateDisplay();
+          roundStart = performance.now();
+          animFrame = requestAnimationFrame(gameLoop);
+        }, 1200);
+      });
+    }, 800);
+    return;
+  }
+
   if (gameMode === 'licks') {
     // Lick mode: advance to next note in lick
     lickNoteIndex++;
@@ -2213,6 +2399,22 @@ function endGame() {
       bestEl.className = 'go-best go-new-best';
     } else {
       bestEl.textContent = `BEST: ${hiScoreLick}`;
+      bestEl.className = 'go-best';
+    }
+  } else if (gameMode === 'progression') {
+    const isNewBest = score > hiScoreProgression;
+    if (isNewBest) {
+      hiScoreProgression = score;
+      localStorage.setItem('notechaser_hi_progression', hiScoreProgression);
+    }
+    document.getElementById('goScore').textContent = score;
+    document.getElementById('goScoreLabel').textContent = 'Progressions Completed';
+    const bestEl = document.getElementById('goBest');
+    if (isNewBest && score > 0) {
+      bestEl.textContent = 'NEW BEST!';
+      bestEl.className = 'go-best go-new-best';
+    } else {
+      bestEl.textContent = `BEST: ${hiScoreProgression}`;
       bestEl.className = 'go-best';
     }
   } else if (gameMode === 'melody' || gameMode === 'harmonic') {

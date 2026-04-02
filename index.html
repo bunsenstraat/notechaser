@@ -29,6 +29,7 @@
       <button class="mode-btn" data-mode="bass" onclick="setMode('bass')">&#127928; Find the Bass</button>
       <button class="mode-btn" data-mode="scale" onclick="setMode('scale')">&#127925; Scales</button>
       <button class="mode-btn" data-mode="licks" onclick="setMode('licks')">&#127927; Licks</button>
+      <button class="mode-btn" data-mode="progression" onclick="setMode('progression')">&#127929; Progressions</button>
     </div>
 
     <!-- Interval-based setup (voice/instrument/melody) -->
@@ -161,6 +162,19 @@
       <div class="time-slider-wrap">
         <input type="range" id="lickTempoSlider" class="time-slider" min="80" max="240" value="140" step="10" oninput="updateLickTempoLabel()">
         <div class="time-label" id="lickTempoLabel">140 BPM</div>
+      </div>
+    </div>
+
+    <!-- Progression setup -->
+    <div id="progressionSetup" style="display:none">
+      <div class="section-label">Progressions</div>
+      <div class="scale-grid" id="progressionGrid"></div>
+      <div class="section-label" style="margin-top:12px">Presets</div>
+      <div class="preset-row">
+        <button class="preset-btn" onclick="progressionPreset('major')">Major</button>
+        <button class="preset-btn" onclick="progressionPreset('minor')">Minor</button>
+        <button class="preset-btn" onclick="progressionPreset('all')">All</button>
+        <button class="preset-btn" onclick="progressionPreset('none')">Clear</button>
       </div>
     </div>
 
