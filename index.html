@@ -1125,7 +1125,13 @@ body::before {
       <button class="preset-btn speed-btn" data-speed="1" onclick="setMelodySpeed(1)">INSANE</button>
     </div>
 
-    <div class="mic-hint">Microphone access required for pitch detection</div>
+    <div class="section-label">INPUT</div>
+    <div class="dir-row">
+      <button class="dir-btn selected input-mode-btn" data-input="mic" onclick="setInputMode(false)">&#127908; Microphone</button>
+      <button class="dir-btn input-mode-btn" data-input="midi" onclick="setInputMode(true)">&#127929; MIDI Keyboard</button>
+    </div>
+
+    <div class="mic-hint" id="micHint">Microphone access required for pitch detection</div>
     <button class="start-btn" id="startBtn" onclick="startGame()">Start</button>
   </div>
 
@@ -1585,6 +1591,125 @@ function getRangeLow() { if (gameMode === 'bass') return BASS_RANGE_LOW; if (isC
 function getRangeHigh() { if (gameMode === 'bass') return BASS_RANGE_LOW + 12; if (isChordSing()) return CHORD_SING_LOW + 8; if (isScaleWide() || isLickWide()) return INST_RANGE_HIGH; return isInstrumentMode() ? INST_RANGE_HIGH : RANGE_HIGH; }
 function getRangeAbsLow() { if (gameMode === 'bass') return BASS_RANGE_LOW; if (isChordSing()) return CHORD_SING_LOW; if (isScaleWide() || isLickWide()) return INST_RANGE_ABS_LOW; return isInstrumentMode() ? INST_RANGE_ABS_LOW : RANGE_ABS_LOW; }
 function getRangeAbsHigh() { if (gameMode === 'bass') return BASS_RANGE_HIGH; if (isChordSing()) return CHORD_SING_HIGH; if (isScaleWide() || isLickWide()) return INST_RANGE_ABS_HIGH; return isInstrumentMode() ? INST_RANGE_ABS_HIGH : RANGE_ABS_HIGH; }
+
+// ── MIDI INPUT ──
+let useMidi = false;
+let midiAccess = null;
+let midiHeldNotes = new Set(); // currently held MIDI notes
+let midiInput = null;
+
+async function initMidi() {
+  if (!navigator.requestMIDIAccess) {
+    alert('Web MIDI is not supported in this browser. Please use Chrome or Edge.');
+    return false;
+  }
+  try {
+    midiAccess = await navigator.requestMIDIAccess();
+    connectMidiInputs();
+    midiAccess.onstatechange = () => connectMidiInputs();
+    return true;
+  } catch(e) {
+    alert('MIDI access denied. Please allow MIDI access and try again.');
+    return false;
+  }
+}
+
+function connectMidiInputs() {
+  if (!midiAccess) return;
+  for (const input of midiAccess.inputs.values()) {
+    input.onmidimessage = handleMidiMessage;
+  }
+}
+
+function handleMidiMessage(msg) {
+  const [status, note, velocity] = msg.data;
+  const command = status & 0xf0;
+  if (command === 0x90 && velocity > 0) {
+    // Note on
+    midiHeldNotes.add(note);
+    onMidiNoteChange();
+  } else if (command === 0x80 || (command === 0x90 && velocity === 0)) {
+    // Note off
+    midiHeldNotes.delete(note);
+  }
+}
+
+function onMidiNoteChange() {
+  if (!gameActive || melodyPlaying || !useMidi) return;
+
+  if (gameMode === 'chord') {
+    // Chord mode: check if held notes match all target notes
+    // Show what's being played on piano
+    updateChordPiano(null, midiHeldNotes);
+    updateMidiChordDisplay();
+
+    // Check if all target notes are held (allow extra notes)
+    let allHit = true;
+    for (const t of chordTargetNotes) {
+      if (!midiHeldNotes.has(t)) { allHit = false; break; }
+    }
+    if (allHit && chordTargetNotes.size > 0) {
+      // All chord tones played simultaneously!
+      chordHitNotes = new Set(chordTargetNotes);
+      chordTargetNotes = new Set();
+      updateDisplay();
+      onSuccess();
+    }
+  } else {
+    // Single note modes: use the latest note played
+    if (midiHeldNotes.size === 0) return;
+    const latestNote = [...midiHeldNotes].pop();
+
+    if (gameMode === 'bass') {
+      // Match pitch class
+      const targetMidi = bassNotes[bassIndex];
+      if (latestNote % 12 === targetMidi % 12) {
+        bassIndex++;
+        playChordConfirmBeep();
+        updateDisplay();
+        if (bassIndex >= bassNotes.length) {
+          onSuccess();
+        }
+      }
+    } else if (gameMode === 'licks') {
+      if (latestNote === lickNotes[lickNoteIndex]) {
+        onSuccess();
+      }
+    } else if (gameMode === 'scale') {
+      if (latestNote === scaleNotes[scaleNoteIndex]) {
+        onSuccess();
+      }
+    } else if (gameMode === 'melody' || gameMode === 'harmonic') {
+      if (latestNote === melodyNotes[melodyIndex]) {
+        onSuccess();
+      }
+    } else if (gameMode === 'instrument') {
+      if (latestNote === currentTargetMidi) {
+        onSuccess();
+      }
+    }
+  }
+}
+
+function updateMidiChordDisplay() {
+  const singingEl = document.getElementById('singingNote');
+  if (midiHeldNotes.size > 0) {
+    const names = [...midiHeldNotes].sort((a,b) => a-b).map(m => midiToName(m));
+    singingEl.innerHTML = `You: <span>${names.join(' ')}</span>`;
+  } else {
+    singingEl.innerHTML = '&nbsp;';
+  }
+}
+
+function setInputMode(midi) {
+  useMidi = midi;
+  document.querySelectorAll('.input-mode-btn').forEach(b => {
+    b.classList.toggle('selected', (b.dataset.input === 'midi') === midi);
+  });
+  document.getElementById('micHint').textContent = midi
+    ? 'Connect a MIDI keyboard to play'
+    : 'Microphone access required for pitch detection';
+}
 
 // ── STATE ──
 let selectedIntervals = new Set();
@@ -2603,14 +2728,15 @@ function chooseNextChord() {
   buildPiano(); // rebuild piano to fit this voicing
 }
 
-function updateChordPiano(singingMidi) {
+function updateChordPiano(singingMidi, heldMidiNotes) {
   const showTargets = isChordVoiceMode(); // only show target notes in voice modes (sing/call)
   document.querySelectorAll('.piano-key').forEach(k => {
     k.classList.remove('active-from', 'active-target', 'active-singing');
     const m = parseInt(k.dataset.midi);
     if (chordHitNotes.has(m)) k.classList.add('active-singing'); // green
-    if (showTargets && chordTargetNotes.has(m)) k.classList.add('active-target'); // cyan — only in sing mode
+    if (showTargets && chordTargetNotes.has(m)) k.classList.add('active-target'); // cyan — only in voice modes
     if (singingMidi !== null && m === singingMidi) k.classList.add('active-from'); // magenta = currently playing
+    if (heldMidiNotes && heldMidiNotes.has(m)) k.classList.add('active-from'); // magenta = MIDI held
   });
 }
 
@@ -2900,14 +3026,21 @@ function playChordForMode(rootMidi, intervals, callback) {
 
 async function startGame() {
   TIMEOUT = parseInt(document.getElementById('timeSlider').value) * 1000;
-  try {
-    await startMic();
-  } catch (e) {
-    alert('Microphone access is required for NoteChaser. Please allow mic access and try again.');
-    return;
-  }
 
-  initAudio();
+  if (useMidi) {
+    const ok = await initMidi();
+    if (!ok) return;
+    midiHeldNotes.clear();
+    initAudio();
+  } else {
+    try {
+      await startMic();
+    } catch (e) {
+      alert('Microphone access is required for NoteChaser. Please allow mic access and try again.');
+      return;
+    }
+    initAudio();
+  }
 
   // Ensure speech is warmed up (in case setMode wasn't tapped)
   warmUpSpeech();
@@ -3091,6 +3224,12 @@ function gameLoop() {
 
   // Don't detect pitch while melody is playing back
   if (melodyPlaying) {
+    animFrame = requestAnimationFrame(gameLoop);
+    return;
+  }
+
+  // MIDI mode: detection happens via MIDI callbacks, just keep timer running
+  if (useMidi) {
     animFrame = requestAnimationFrame(gameLoop);
     return;
   }
