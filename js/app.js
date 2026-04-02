@@ -121,9 +121,12 @@ function onMidiNoteChange() {
     updateProgressionPiano();
     updateMidiChordDisplay();
 
+    // Octave-independent: match pitch classes only
+    const heldPCs = new Set([...midiHeldNotes].map(n => n % 12));
+    const targetPCs = new Set([...progTargetNotes].map(n => n % 12));
     let allHit = true;
-    for (const t of progTargetNotes) {
-      if (!midiHeldNotes.has(t)) { allHit = false; break; }
+    for (const pc of targetPCs) {
+      if (!heldPCs.has(pc)) { allHit = false; break; }
     }
     if (allHit && progTargetNotes.size > 0) {
       progHitNotes = new Set(progTargetNotes);
