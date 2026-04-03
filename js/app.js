@@ -1243,9 +1243,11 @@ function playLick(notes, callback) {
 
 // ── CHORD MODE HELPERS ──
 function pickChordRootFor(chordType) {
-  // Pick any pitch class, then place the root in the octave
-  // where the voicing lands around middle C (MIDI 60)
+  // Pick any pitch class, then place the root in the right octave
   const pc = Math.floor(Math.random() * 12);
+  if (isChordSing()) {
+    return placeChordRootForSinging(pc, chordType);
+  }
   return placeChordRoot(pc, chordType);
 }
 
@@ -1269,6 +1271,29 @@ function placeChordRoot(pitchClass, chordType) {
   return bestRoot;
 }
 
+function placeChordRootForSinging(pitchClass, chordType) {
+  // For singing: place voicing in the lower part of the vocal range
+  // so all notes are comfortably singable
+  const lo = CHORD_SING_LOW;
+  const hi = CHORD_SING_HIGH;
+  let bestRoot = null;
+  let bestScore = Infinity;
+  for (let oct = 1; oct <= 6; oct++) {
+    const root = pitchClass + oct * 12;
+    const lowest = root + Math.min(...chordType.intervals);
+    const highest = root + Math.max(...chordType.intervals);
+    // All notes must fit inside the singing range
+    if (lowest < lo || highest > hi) continue;
+    // Prefer placing at the lower end of the range
+    const score = lowest - lo;
+    if (score < bestScore) {
+      bestScore = score;
+      bestRoot = root;
+    }
+  }
+  return bestRoot !== null ? bestRoot : placeChordRoot(pitchClass, chordType);
+}
+
 function chordFitsRoot(chordType, root) {
   // Always fits — we place voicings around middle C
   return true;
@@ -1283,8 +1308,10 @@ function chooseNextChord() {
   }
   const idx = candidates[Math.floor(Math.random() * candidates.length)];
   currentChordType = CHORD_TYPES[idx];
-  // Place voicing around middle C for the current root pitch class
-  chordRoot = placeChordRoot(chordRoot % 12, currentChordType);
+  // Place voicing: around middle C for instruments, lower vocal range for singing
+  chordRoot = isChordSing()
+    ? placeChordRootForSinging(chordRoot % 12, currentChordType)
+    : placeChordRoot(chordRoot % 12, currentChordType);
   chordTargetNotes = new Set(currentChordType.intervals.map(s => chordRoot + s));
   chordHitNotes = new Set();
   holdingForMidi = null;
