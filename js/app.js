@@ -1872,23 +1872,40 @@ function gameLoop() {
         holdBar.style.width = '0%';
       }
     } else if (gameMode === 'chord') {
-      // Chord mode: match against any remaining target note
+      // Chord mode: octave-independent — match pitch class against remaining targets
+      const sungPC = ((roundedMidi % 12) + 12) % 12;
       let bestTarget = null;
       let bestCents = Infinity;
       for (const t of chordTargetNotes) {
-        const c = Math.abs((midi - t) * 100);
+        // Find the closest octave of this target to the sung pitch
+        const tPC = ((t % 12) + 12) % 12;
+        if (tPC !== sungPC) continue;
+        // Compare against the target transposed to the sung octave
+        const tInOctave = Math.round(midi) - (Math.round(midi) % 12 - tPC);
+        const c = Math.abs((midi - tInOctave) * 100);
         if (c < bestCents) { bestCents = c; bestTarget = t; }
       }
 
-      const centsOff = bestTarget !== null ? (midi - bestTarget) * 100 : 999;
+      // If no pitch class match, find nearest target for the needle display
+      if (bestTarget === null) {
+        for (const t of chordTargetNotes) {
+          const tInOctave = t + Math.round((midi - t) / 12) * 12;
+          const c = Math.abs((midi - tInOctave) * 100);
+          if (c < bestCents) { bestCents = c; bestTarget = t; }
+        }
+      }
+
+      const closestOctave = bestTarget !== null ? bestTarget + Math.round((midi - bestTarget) / 12) * 12 : midi;
+      const centsOff = bestTarget !== null ? (midi - closestOctave) * 100 : 999;
       const needlePos = 50 + (centsOff / 400) * 100;
       needle.style.left = Math.max(2, Math.min(98, needlePos)) + '%';
       const absCents = Math.abs(centsOff);
-      needle.className = absCents < CENTS_TOLERANCE ? 'pitch-needle' : absCents < CENTS_TOLERANCE * 2 ? 'pitch-needle close' : 'pitch-needle off-pitch';
+      const pcMatch = bestTarget !== null && ((roundedMidi % 12 + 12) % 12 === (bestTarget % 12 + 12) % 12);
+      needle.className = (absCents < CENTS_TOLERANCE && pcMatch) ? 'pitch-needle' : absCents < CENTS_TOLERANCE * 2 ? 'pitch-needle close' : 'pitch-needle off-pitch';
       singingEl.innerHTML = `You: <span>${noteName}</span>`;
       updateChordPiano(roundedMidi);
 
-      if (absCents < CENTS_TOLERANCE && bestTarget !== null) {
+      if (absCents < CENTS_TOLERANCE && pcMatch && bestTarget !== null) {
         if (holdingForMidi !== bestTarget) { holdStart = now; holdingForMidi = bestTarget; }
         const held = now - holdStart;
         holdBar.style.width = Math.min(100, (held / HOLD_REQUIRED) * 100) + '%';
