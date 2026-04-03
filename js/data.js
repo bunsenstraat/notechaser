@@ -95,15 +95,17 @@ const CHORD_TYPES = [
   { name: '9',          short: '9',     intervals: iv('1 3 5 b7 9'),   cat: 'ext' },
   { name: 'min9',       short: 'm9',    intervals: iv('1 b3 5 b7 9'),  cat: 'ext' },
   { name: 'Maj9',       short: 'Maj9',  intervals: iv('1 3 5 7 9'),    cat: 'ext' },
-  // Rootless Type A (3rd on bottom — Bill Evans)
+  // Rootless Type A
   { name: 'Maj7 RL-A',    short: 'Maj7 A', intervals: iv('7 3 5'),        cat: 'rootless-A' },
   { name: 'Dom7 RL-A',    short: '7 A',    intervals: iv('3 b7 9'),       cat: 'rootless-A' },
-  //{ name: 'Dom7 RL-A 13',    short: '13 A',    intervals: iv('3 b7 9 13'),       cat: 'rootless-A' },
   { name: 'Min7 RL-A',    short: 'm7 A',   intervals: iv('b7 b3 5'),      cat: 'rootless-A' },
+  // Rootless Minor Type A
+  { name: 'Min7♭5 RL-A',  short: 'ø A',    intervals: iv('b7 b3 b5'),     cat: 'rootless-A' },
+  { name: 'Dom7b9 RL-A',    short: '7b9 A',    intervals: iv('3 b7 b9'),  cat: 'rootless-A' },
   //{ name: 'Min7 RL-A 11',    short: 'm7 A 11',   intervals: iv('b3 b7 9 11'),      cat: 'rootless-A' }, 
-  //{ name: 'Min7♭5 RL-A',  short: 'ø A',    intervals: iv('b3 b5 b7 9'),     cat: 'rootless-A' },
+  //
   //{ name: 'Dom9 RL-A',    short: '9 A',    intervals: iv('3 b7 9 11'),      cat: 'rootless-A' },
-  // Rootless Type B (7th on bottom — Bill Evans)
+  // Rootless Type B
   { name: 'Maj7 RL-B',    short: 'Maj7 B', intervals: iv('3 7 9'),        cat: 'rootless-B' },
   { name: 'Dom7 RL-B',    short: '7 B',    intervals: iv('b7 3 13'),      cat: 'rootless-B' },
   //{ name: 'Dom7 RL-B 13',    short: '13 B',    intervals: iv('b7 9 3 13'),      cat: 'rootless-B' },
@@ -112,6 +114,14 @@ const CHORD_TYPES = [
   //{ name: 'Min7 RL-B 11',    short: 'm7 B 11',   intervals: iv('b7 9 b3 11'),      cat: 'rootless-B' },
   //{ name: 'Min7♭5 RL-B',  short: 'ø B',    intervals: iv('b7 b9 b3 b5'),    cat: 'rootless-B' },
   //{ name: 'Dom9 RL-B',    short: '9 B',    intervals: iv('b7 9 3 13'),      cat: 'rootless-B' },
+
+    // Rootless Minor Type B
+  { name: 'Min7♭5 RL-B',  short: 'ø B',    intervals: iv('b3 b7 1'),     cat: 'rootless-B' },
+  { name: 'Dom7#5 RL-B',    short: '7#5 B',    intervals: iv('b7 3 #5'),  cat: 'rootless-B' },
+
+
+
+
   // Shell voicings (root + guide tones)
   { name: 'Maj7 Shell',   short: 'Maj7 sh', intervals: iv('1 3 7'),         cat: 'shell' },
   { name: 'Dom7 Shell',   short: '7 sh',    intervals: iv('1 3 b7'),        cat: 'shell' },
@@ -255,6 +265,22 @@ const PROGRESSIONS = [
       { degRoot: 0, chordName: 'Maj7 RL-B' },
     ]
   },
+  {
+    name: 'minor ii-V-I in A', short: 'iim⁷b5→V⁷b9→Im7 (A)', cat: 'minor',
+    chords: [
+      { degRoot: 2, chordName: 'Min7♭5 RL-A' },
+      { degRoot: 7, chordName: 'Dom7b9 RL-A' },
+      { degRoot: 0, chordName: 'Min7 RL-A'  },
+    ]
+  },
+  {
+    name: 'minor ii-V-I in B', short: 'iim⁷b5→V⁷b9→Im7 (B)', cat: 'minor',
+    chords: [
+      { degRoot: 2, chordName: 'Min7♭5 RL-B' },
+      { degRoot: 7, chordName: 'Dom7#5 RL-B' },
+      { degRoot: 0, chordName: 'Min7 RL-B'  },
+    ]
+  },
 ];
 
 // ── SPEECH MAP (human-readable pronunciation for TTS) ──
@@ -298,6 +324,8 @@ const SPEECH_MAP = {
   'ii-V-I':'two five one',
   'ii-V-I in A':'two five one, type A',
   'ii-V-I in B':'two five one, type B',
+  'minor ii-V-I in A': 'minor two five one, type A',
+  'minor ii-V-I in B': 'minor two five one, type B',
   'Turnaround':'turnaround',
   'Minor ii-V-i':'minor two five one',
   'Rhythm Bridge':'rhythm bridge',
