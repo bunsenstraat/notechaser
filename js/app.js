@@ -1500,10 +1500,10 @@ function updateDisplay() {
     const total = currentChordType.intervals.length;
     if (isChordVoiceMode()) {
       document.getElementById('intervalDisplay').textContent = `${currentChordType.name} — ${remaining} note${remaining !== 1 ? 's' : ''} left`;
-      document.getElementById('noteFrom').textContent = `Root: ${midiToName(chordRoot)}`;
+      document.getElementById('noteFrom').textContent = `Root: ${currentKeyDisplay}`;
     } else {
       document.getElementById('intervalDisplay').textContent = `${remaining} note${remaining !== 1 ? 's' : ''} left`;
-      document.getElementById('noteFrom').textContent = `Root: ${midiToName(chordRoot)}`;
+      document.getElementById('noteFrom').textContent = `Root: ${currentKeyDisplay}`;
     }
     document.getElementById('noteTarget').textContent = `${chordHitNotes.size}/${total}`;
     document.getElementById('arrowDir').innerHTML = '&#127927;';
@@ -1594,7 +1594,7 @@ function playChordForMode(rootMidi, intervals, callback) {
   if (chordPlayback === 'sing' || chordPlayback === 'call') {
     // Sing mode — voice-announce chord name, play only the root
     melodyPlaying = true;
-    const rootLabel = midiToName(rootMidi).replace('#', ' sharp').replace('b', ' flat');
+    const rootLabel = speechify(currentKeyDisplay);
     const spokenName = speechify(currentChordType.name);
     const chordLabel = rootLabel + ' ' + spokenName;
     speak(chordLabel, () => {
@@ -1679,6 +1679,7 @@ async function startGame() {
     }, 400);
   } else if (gameMode === 'chord') {
     chordRoot = Math.floor(Math.random() * 12); // random pitch class
+    currentKeyDisplay = jazzNoteName(chordRoot);
     currentChordType = null;
     chordRoundsOnRoot = 0;
     score = 0;
@@ -1696,8 +1697,7 @@ async function startGame() {
       if (chordPlayback === 'sing' || chordPlayback === 'call') {
         startPlayingChord(); // sing mode announces chord name itself
       } else {
-        const rootName = midiToName(chordRoot).replace('#', ' sharp').replace('b', ' flat');
-        speak(rootName, startPlayingChord);
+        speak(speechify(currentKeyDisplay), startPlayingChord);
       }
     }, 400);
   } else if (gameMode === 'progression') {
@@ -2074,6 +2074,7 @@ function onSuccess() {
     if (chordRoundsOnRoot >= chordRoundsPerRoot) {
       // New random root pitch class
       chordRoot = Math.floor(Math.random() * 12); // just pitch class for now
+      currentKeyDisplay = jazzNoteName(chordRoot);
       chordRoundsOnRoot = 0;
       rootChanged = true;
     }
@@ -2089,8 +2090,7 @@ function onSuccess() {
 
     setTimeout(() => {
       if (rootChanged && chordPlayback !== 'sing' && chordPlayback !== 'call') {
-        const rootName = midiToName(chordRoot).replace('#', ' sharp').replace('b', ' flat');
-        speak(rootName, playNext);
+        speak(speechify(currentKeyDisplay), playNext);
       } else {
         playNext();
       }
