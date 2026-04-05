@@ -18,6 +18,7 @@ function jazzNoteName(pitchClass) {
   const pc = ((pitchClass % 12) + 12) % 12;
   const flatWeight = ENHARMONIC_FLAT_WEIGHT[pc];
   if (flatWeight === undefined) return NOTE_NAMES[pc]; // natural note
+  //return NOTE_NAMES_FLAT[pc] 
   return Math.random() < flatWeight ? NOTE_NAMES_FLAT[pc] : NOTE_NAMES[pc];
 }
 
@@ -358,7 +359,7 @@ const SPEECH_MAP = {
 
 // Helper: look up speech-friendly name, with note name sharpening
 function speechify(text) {
-  return (SPEECH_MAP[text] || text).replace(/#/g, ' sharp').replace(/♭/g, ' flat');
+  return (SPEECH_MAP[text] || text).replace(/#/g, ' sharp').replace(/♭/g, ' flat').replace(/([A-G])b/g, '$1 flat');
 }
 
 // MIDI note helpers: A4 = 69 = 440Hz
