@@ -1,6 +1,25 @@
 // NoteChaser — Data Constants
 // ── NOTE / INTERVAL DATA ──
 const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const NOTE_NAMES_FLAT = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+
+// Jazz-friendly note naming: randomly pick sharp or flat for enharmonic keys,
+// weighted towards how common each spelling is in jazz
+// Bb ≫ A#, Eb ≫ D#, Ab > G#, Db > C#, Gb ≈ F#
+const ENHARMONIC_FLAT_WEIGHT = {
+  1: 0.5,   // C#/Db — both common, 50/50
+  3: 0.8,   // D#/Eb — Eb much more common
+  6: 0.5,   // F#/Gb — both common, 50/50
+  8: 0.7,   // G#/Ab — Ab more common
+  10: 0.9,  // A#/Bb — Bb overwhelmingly more common
+};
+
+function jazzNoteName(pitchClass) {
+  const pc = ((pitchClass % 12) + 12) % 12;
+  const flatWeight = ENHARMONIC_FLAT_WEIGHT[pc];
+  if (flatWeight === undefined) return NOTE_NAMES[pc]; // natural note
+  return Math.random() < flatWeight ? NOTE_NAMES_FLAT[pc] : NOTE_NAMES[pc];
+}
 
 const INTERVALS = [
   { name: 'Minor 2nd',  semitones: 1,  short: 'm2' },

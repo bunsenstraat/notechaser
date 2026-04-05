@@ -282,6 +282,8 @@ let scaleCurrentDir = 'up'; // tracks actual direction for voice announcement
 let scaleRangeWide = false; // false = vocal range, true = instrument/keyboard range
 let hiScoreScale = parseInt(localStorage.getItem('notechaser_hi_scale') || '0');
 
+let currentKeyDisplay = ''; // jazz-friendly key name for current round
+
 let audioCtx = null;
 let masterGain = null;
 let analyser = null;
@@ -1331,6 +1333,8 @@ function updateChordPiano(singingMidi, heldMidiNotes) {
 }
 
 // ── PROGRESSION MODE HELPERS ──
+let progChordRootDisplay = ''; // jazz-friendly name for current chord root
+
 function setupProgChord() {
   const chordDef = currentProgression.chords[progChordIndex];
   progCurrentChordType = resolveChordType(chordDef.chordName);
@@ -1338,6 +1342,7 @@ function setupProgChord() {
   progCurrentRoot = placeChordRoot(chordRootPC, progCurrentChordType);
   progTargetNotes = new Set(progCurrentChordType.intervals.map(s => progCurrentRoot + s));
   progHitNotes = new Set();
+  progChordRootDisplay = jazzNoteName(chordRootPC);
 }
 
 function updateProgressionPiano() {
@@ -1410,7 +1415,7 @@ function playCadence(chordArrays, callback) {
 }
 
 function announceBassKey(pitchClass, isMinor, callback) {
-  const name = NOTE_NAMES[pitchClass].replace('#', ' sharp').replace('b', ' flat');
+  const name = speechify(currentKeyDisplay);
   const quality = isMinor ? 'minor' : 'major';
   speak(`${name} ${quality}`, callback);
 }
@@ -1482,7 +1487,7 @@ function updateDisplay() {
     document.getElementById('intervalDisplay').textContent = isSingle
       ? `${chordName}`
       : `${currentCadence.name} — ${chordName} (${bassIndex + 1}/${bassNotes.length})`;
-    document.getElementById('noteFrom').textContent = `Key: ${NOTE_NAMES[bassKeyRoot]}`;
+    document.getElementById('noteFrom').textContent = `Key: ${currentKeyDisplay}`;
     document.getElementById('noteTarget').textContent = bassIndex < bassNotes.length ? midiToName(bassNotes[bassIndex]) : '✓';
     document.getElementById('arrowDir').innerHTML = '&#127928;';
     document.getElementById('replayHint').innerHTML = isSingle
@@ -1532,20 +1537,18 @@ function updateDisplay() {
     updatePianoHighlights(null, scaleNotes[scaleNoteIndex], null);
   } else if (gameMode === 'licks') {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreLick}`;
-    const keyName = NOTE_NAMES[lickKeyOrder[lickKeyIndex]];
-    document.getElementById('intervalDisplay').textContent = `${currentLick.name} in ${keyName} — Note ${lickNoteIndex + 1} / ${lickNotes.length}`;
-    document.getElementById('noteFrom').textContent = `Key: ${keyName}`;
+    document.getElementById('intervalDisplay').textContent = `${currentLick.name} in ${currentKeyDisplay} — Note ${lickNoteIndex + 1} / ${lickNotes.length}`;
+    document.getElementById('noteFrom').textContent = `Key: ${currentKeyDisplay}`;
     document.getElementById('noteTarget').textContent = midiToName(lickNotes[lickNoteIndex]);
     document.getElementById('arrowDir').innerHTML = '&#127927;';
     document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay lick';
     updatePianoHighlights(null, lickNotes[lickNoteIndex], null);
   } else if (gameMode === 'progression') {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreProgression}`;
-    const keyName = NOTE_NAMES[progKeyRoot];
     const chordDef = currentProgression.chords[progChordIndex];
-    document.getElementById('intervalDisplay').textContent = `${currentProgression.name} in ${keyName}`;
+    document.getElementById('intervalDisplay').textContent = `${currentProgression.name} in ${currentKeyDisplay}`;
     document.getElementById('noteFrom').textContent = `Chord ${progChordIndex + 1}/${currentProgression.chords.length}: ${chordDef.chordName}`;
-    document.getElementById('noteTarget').textContent = `${NOTE_NAMES[(progKeyRoot + chordDef.degRoot) % 12]} root`;
+    document.getElementById('noteTarget').textContent = `${progChordRootDisplay} root`;
     document.getElementById('arrowDir').innerHTML = '&#127929;';
     document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to hear root';
     document.getElementById('answerBtn').style.display = '';
@@ -1649,6 +1652,7 @@ async function startGame() {
 
   if (gameMode === 'bass') {
     bassKeyRoot = pickBassKey();
+    currentKeyDisplay = jazzNoteName(bassKeyRoot);
     const indices = [...selectedCadences];
     currentCadence = CADENCES[indices[Math.floor(Math.random() * indices.length)]];
     score = 0;
@@ -1700,6 +1704,7 @@ async function startGame() {
     score = 0;
     progChordIndex = 0;
     progKeyRoot = Math.floor(Math.random() * 12);
+    currentKeyDisplay = jazzNoteName(progKeyRoot);
     // Pick random progression
     const progIndices = [...selectedProgressions];
     currentProgression = PROGRESSIONS[progIndices[Math.floor(Math.random() * progIndices.length)]];
@@ -1709,8 +1714,7 @@ async function startGame() {
 
     setTimeout(() => {
       // Announce progression name and key
-      const keyName = speechify(NOTE_NAMES[progKeyRoot]);
-      speak(`${speechify(currentProgression.name)}, in ${keyName}`, () => {
+      speak(`${speechify(currentProgression.name)}, in ${speechify(currentKeyDisplay)}`, () => {
         // Play the root note
         playNote(progCurrentRoot, 1.0);
         setTimeout(() => {
@@ -1749,6 +1753,7 @@ async function startGame() {
     lickKeysPlayed = 0;
     lickKeyOrder = shuffleKeys();
     lickKeyIndex = 0;
+    currentKeyDisplay = jazzNoteName(lickKeyOrder[0]);
     // Pick first lick
     const lickIndices = [...selectedLicks];
     currentLick = LICKS[lickIndices[Math.floor(Math.random() * lickIndices.length)]];
@@ -1758,8 +1763,7 @@ async function startGame() {
     updateDisplay();
 
     setTimeout(() => {
-      const keyName = NOTE_NAMES[lickKeyOrder[lickKeyIndex]].replace('#', ' sharp').replace('b', ' flat');
-      speak(`${currentLick.name}, in ${keyName}`, () => {
+      speak(`${currentLick.name}, in ${speechify(currentKeyDisplay)}`, () => {
         playLick(lickNotes, () => {
           updateDisplay();
           gameActive = true;
@@ -2030,6 +2034,7 @@ function onSuccess() {
 
     // New key + cadence
     bassKeyRoot = pickBassKey();
+    currentKeyDisplay = jazzNoteName(bassKeyRoot);
     const indices = [...selectedCadences];
     currentCadence = CADENCES[indices[Math.floor(Math.random() * indices.length)]];
     buildBassRound();
@@ -2106,6 +2111,7 @@ function onSuccess() {
 
     // New key + maybe new progression
     progKeyRoot = Math.floor(Math.random() * 12);
+    currentKeyDisplay = jazzNoteName(progKeyRoot);
     progChordIndex = 0;
     const progIndices = [...selectedProgressions];
     currentProgression = PROGRESSIONS[progIndices[Math.floor(Math.random() * progIndices.length)]];
@@ -2115,8 +2121,7 @@ function onSuccess() {
     document.getElementById('intervalDisplay').textContent = `✓ Progression ${score}!`;
 
     setTimeout(() => {
-      const keyName = speechify(NOTE_NAMES[progKeyRoot]);
-      speak(`${speechify(currentProgression.name)}, in ${keyName}`, () => {
+      speak(`${speechify(currentProgression.name)}, in ${speechify(currentKeyDisplay)}`, () => {
         playNote(progCurrentRoot, 1.0);
         setTimeout(() => {
           updateDisplay();
@@ -2158,16 +2163,15 @@ function onSuccess() {
       }
 
       // Build lick in new key
+      currentKeyDisplay = jazzNoteName(lickKeyOrder[lickKeyIndex]);
       lickRoot = pickLickRoot(lickKeyOrder[lickKeyIndex]);
       lickNotes = buildLickNotes(currentLick, lickRoot);
       lickNoteIndex = 0;
 
-      const keyName = NOTE_NAMES[lickKeyOrder[lickKeyIndex]];
       document.getElementById('intervalDisplay').textContent = `✓ Lick ${score}!`;
 
       setTimeout(() => {
-        const keySpoken = keyName.replace('#', ' sharp').replace('b', ' flat');
-        speak(`${currentLick.name}, in ${keySpoken}`, () => {
+        speak(`${currentLick.name}, in ${speechify(currentKeyDisplay)}`, () => {
           playLick(lickNotes, () => {
             updateDisplay();
             roundStart = performance.now();
