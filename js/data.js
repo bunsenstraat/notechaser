@@ -165,6 +165,8 @@ const CHORD_TYPES = [
 // Each lick is an array of semitones relative to the root (0 = root)
 // Negative values = below root, positive = above
 const LICKS = [
+  { name: 'two note enclosure above/below', cat: 'basic', notes: [2, -1, 0] },
+  { name: 'Enclosures up the Maj scale', cat: 'bebop', notes: [2, -1, 0, 4, 1, 2, 5, 3, 4, 7, 4, 5, 9, 6, 7, 11, 8, 9, 12, 10, 11, 12] },
   { name: '1-2-3-5', cat: 'basic', notes: [0, 2, 4, 7] },
   { name: '1-3-5-7', cat: 'basic', notes: [0, 4, 7, 11] },
   { name: '5-4-3-1', cat: 'basic', notes: [7, 5, 4, 0] },
