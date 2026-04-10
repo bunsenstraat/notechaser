@@ -169,6 +169,7 @@ const LICKS = [
   { name: 'Enclosures up Maj (above/below)', cat: 'bebop', notes: [2, -1, 0, 4, 1, 2, 5, 3, 4, 7, 4, 5, 9, 6, 7, 11, 8, 9, 12, 10, 11, 12] },
   { name: 'Enclosures up Maj (below/above)', cat: 'bebop', notes: [-1, 2, 0, 1, 4, 2, 3, 5, 4, 4, 7, 5, 6, 9, 7, 8, 11, 9, 10, 12, 11, 12] },
   { name: 'Run-through up Maj', cat: 'bebop', notes: [-1, 0, 2, 0, 1, 2, 4, 2, 3, 4, 5, 4, 4, 5, 7, 5, 6, 7, 9, 7, 8, 9, 11, 9, 10, 11, 12, 11, 12] },
+  { name: '4-note Enclosure up Maj', cat: 'bebop', notes: [2, 1, -1, 0, 4, 3, 1, 2, 3, 2, 5, 4, 7, 6, 4, 5, 9, 8, 6, 7, 11, 10, 8, 9, 10, 9, 12, 11, 12] },
   { name: '1-2-3-5', cat: 'basic', notes: [0, 2, 4, 7] },
   { name: '1-3-5-7', cat: 'basic', notes: [0, 4, 7, 11] },
   { name: '5-4-3-1', cat: 'basic', notes: [7, 5, 4, 0] },
