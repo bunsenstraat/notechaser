@@ -76,7 +76,7 @@ const IV = {
   'b5':6, '5':7, '#5':8, 'b6':8, '6':9, 'bb7':9, 'b7':10, '7':11,
   '8':12, 'b9':13, '9':14, '#9':15, 'b10':15, '10':16,
   '11':17, '#11':18, 'b12':18, '12':19, 'b13':20, '13':21, '#13':22,
-  '14':23, 'b15':23, '15':24,
+  '14':23, 'b15':23, '15':24, '#15':25, 'b16':25, '16':26, '#16':27, 'b17':27, '17':28, '#17':29, 'b18':29, '18':30, 'b19':30, '19':31, '#19':32,
 };
 function iv(str) {
   // Parse interval string like "1 3 5 b7 9" → [0, 4, 7, 10, 14]
@@ -147,7 +147,13 @@ const CHORD_TYPES = [
   { name: 'Dom7 Shell',   short: '7 sh',    intervals: iv('1 3 b7'),        cat: 'shell' },
   { name: 'Min7 Shell',   short: 'm7 sh',   intervals: iv('1 b3 b7'),       cat: 'shell' },
   { name: 'Min7♭5 Shell', short: 'ø sh',    intervals: iv('1 b3 b7'),       cat: 'shell' },
-  // Quartal voicings (stacked 4ths)
+  // moving up the major pentatonic scale using magic voicings by Open Studio https://www.youtube.com/shorts/q57jO0C0-PI, each starting on the next note of the pentatonic scale (1 2 3 5 6)
+  { name: 'Home one', short: 'home 1',    intervals: iv('3 6 9 12 15'),       cat: 'shell' },
+  { name: 'Home two', short: 'home 2',    intervals: iv('5 8 10 13 16'),       cat: 'shell' },
+  { name: 'Home three', short: 'home 3',    intervals: iv('6 9 12 15 17'),       cat: 'shell' },
+  { name: 'Home four', short: 'home 4',    intervals: iv('1 3 6 9 12'),       cat: 'shell' },
+  { name: 'Home five', short: 'home 5',    intervals: iv('2 5 8 10 13'),       cat: 'shell' },
+
   // { name: 'Quartal 3',    short: 'Q3',     intervals: iv('1 4 b7'),         cat: 'quartal' },
   // { name: 'Quartal 4',    short: 'Q4',     intervals: iv('1 4 b7 b10'),     cat: 'quartal' },
   // { name: 'Quartal 5',    short: 'Q5',     intervals: iv('1 4 b7 b10 b13'), cat: 'quartal' },
@@ -306,6 +312,16 @@ const PROGRESSIONS = [
       { degRoot: 0, chordName: 'Min7 RL-B'  },
     ]
   },
+  {
+    name: 'Up pentatonic major scale', short: 'Up pentatonic', cat: 'pentatonic',
+    chords: [
+      { degRoot: 0, chordName: 'Home one' },
+      { degRoot: 0, chordName: 'Home two' },
+      { degRoot: 0, chordName: 'Home three' },
+      { degRoot: 0, chordName: 'Home four' },
+      { degRoot: 0, chordName: 'Home five' },
+    ]
+  }
 ];
 
 // ── SPEECH MAP (human-readable pronunciation for TTS) ──
