@@ -18,12 +18,13 @@ const DEFAULTS = {
   bassLow: 36, bassHigh: 72,          // C2 – C5
   cents: 50, holdMs: 500,
   sensitivity: 5, confidence: 20,
-  announceVoice: true, autoPlayIntro: true,
+  announceVoice: true, autoPlayIntro: true, hidePiano: false,
 };
 
 // Toggleable behaviors (loaded from settings)
 let ANNOUNCE_VOICE = true;
 let AUTO_PLAY_INTRO = true;
+let HIDE_PIANO = false;
 
 // Mutable ranges (loaded from settings)
 let RANGE_LOW = 48;
@@ -2601,6 +2602,7 @@ function loadSettingsUI() {
   document.getElementById('sConfidence').value = s.confidence;
   document.getElementById('sAnnounceVoice').checked = s.announceVoice !== false;
   document.getElementById('sAutoPlayIntro').checked = s.autoPlayIntro !== false;
+  document.getElementById('sHidePiano').checked = s.hidePiano === true;
   updateSettingDisplay();
 }
 
@@ -2644,6 +2646,13 @@ function applySettings(s) {
   CONFIDENCE_THRESHOLD = s.confidence / 100; // 5-50 → 0.05-0.50
   ANNOUNCE_VOICE = s.announceVoice !== false;
   AUTO_PLAY_INTRO = s.autoPlayIntro !== false;
+  HIDE_PIANO = s.hidePiano === true;
+  applyHidePiano();
+}
+
+function applyHidePiano() {
+  const piano = document.getElementById('piano');
+  if (piano) piano.style.display = HIDE_PIANO ? 'none' : '';
 }
 
 function saveSettings() {
@@ -2662,6 +2671,7 @@ function saveSettings() {
     confidence: +document.getElementById('sConfidence').value,
     announceVoice: document.getElementById('sAnnounceVoice').checked,
     autoPlayIntro: document.getElementById('sAutoPlayIntro').checked,
+    hidePiano: document.getElementById('sHidePiano').checked,
   };
   localStorage.setItem('notechaser_settings', JSON.stringify(s));
   applySettings(s);

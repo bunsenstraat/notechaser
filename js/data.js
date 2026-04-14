@@ -154,6 +154,18 @@ const CHORD_TYPES = [
   { name: 'Home four', short: 'home 4',    intervals: iv('1 3 6 9 12'),       cat: 'shell' },
   { name: 'Home five', short: 'home 5',    intervals: iv('2 5 8 10 13'),       cat: 'shell' },
 
+
+  // guide tones only 3/7 and 7/3 for all chord types, plus some extra ones for fun
+  { name: 'Guide 3/7 Major',    short: '3/7',    intervals: iv('3 7'),             cat: 'guide' },
+  { name: 'Guide 7/3 Major',    short: '7/3',    intervals: iv('7 3'),             cat: 'guide' },
+  { name: 'Guide 3/7 Dom',      short: '3/7 dom',    intervals: iv('3 b7'),        cat: 'guide' },
+  { name: 'Guide 7/3 Dom',      short: '7/3 dom',    intervals: iv('b7 3'),        cat: 'guide' },
+  { name: 'Guide 3/7 Min',      short: '3/7 min',    intervals: iv('b3 b7'),       cat: 'guide' },
+  { name: 'Guide 7/3 Min',      short: '7/3 min',    intervals: iv('b7 b3'),       cat: 'guide' },
+  
+  { name: 'Guide 3/7 Dom flat 9',      short: '3/7 dom',    intervals: iv('3 b7', 'b9'),        cat: 'guide' },
+  { name: 'Guide 7/3 Dom flat 9',      short: '7/3 dom',    intervals: iv('b7 3', 'b9'),        cat: 'guide' },
+
   // { name: 'Quartal 3',    short: 'Q3',     intervals: iv('1 4 b7'),         cat: 'quartal' },
   // { name: 'Quartal 4',    short: 'Q4',     intervals: iv('1 4 b7 b10'),     cat: 'quartal' },
   // { name: 'Quartal 5',    short: 'Q5',     intervals: iv('1 4 b7 b10 b13'), cat: 'quartal' },
