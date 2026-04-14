@@ -18,7 +18,12 @@ const DEFAULTS = {
   bassLow: 36, bassHigh: 72,          // C2 – C5
   cents: 50, holdMs: 500,
   sensitivity: 5, confidence: 20,
+  announceVoice: true, autoPlayIntro: true,
 };
+
+// Toggleable behaviors (loaded from settings)
+let ANNOUNCE_VOICE = true;
+let AUTO_PLAY_INTRO = true;
 
 // Mutable ranges (loaded from settings)
 let RANGE_LOW = 48;
@@ -1030,6 +1035,11 @@ function detectPitch() {
 
 // ── CHORD PLAYBACK ──
 function speak(text, callback) {
+  // If voice announcements are disabled, skip speech entirely
+  if (!ANNOUNCE_VOICE) {
+    if (callback) setTimeout(callback, 50);
+    return;
+  }
   // Cancel any queued speech to avoid pile-ups
   speechSynthesis.cancel();
 
@@ -1660,13 +1670,18 @@ async function startGame() {
     buildBassRound();
     updateDisplay();
 
+    const beginGame = () => {
+      updateDisplay();
+      gameActive = true;
+      roundStart = performance.now();
+      gameLoop();
+    };
     const startListening = () => {
-      playCadence(bassCadenceChords, () => {
-        updateDisplay();
-        gameActive = true;
-        roundStart = performance.now();
-        gameLoop();
-      });
+      if (AUTO_PLAY_INTRO) {
+        playCadence(bassCadenceChords, beginGame);
+      } else {
+        beginGame();
+      }
     };
 
     setTimeout(() => {
@@ -1687,12 +1702,17 @@ async function startGame() {
     updateDisplay();
 
     setTimeout(() => {
+      const beginGame = () => {
+        gameActive = true;
+        roundStart = performance.now();
+        gameLoop();
+      };
       const startPlayingChord = () => {
-        playChordForMode(chordRoot, currentChordType.intervals, () => {
-          gameActive = true;
-          roundStart = performance.now();
-          gameLoop();
-        });
+        if (AUTO_PLAY_INTRO) {
+          playChordForMode(chordRoot, currentChordType.intervals, beginGame);
+        } else {
+          beginGame();
+        }
       };
       if (chordPlayback === 'sing' || chordPlayback === 'call') {
         startPlayingChord(); // sing mode announces chord name itself
@@ -1715,13 +1735,17 @@ async function startGame() {
     setTimeout(() => {
       // Announce progression name and key
       speak(`${speechify(currentProgression.name)}, in ${speechify(currentKeyDisplay)}`, () => {
-        // Play the root note
-        playNote(progCurrentRoot, 1.0);
-        setTimeout(() => {
+        const beginGame = () => {
           gameActive = true;
           roundStart = performance.now();
           gameLoop();
-        }, 1200);
+        };
+        if (AUTO_PLAY_INTRO) {
+          playNote(progCurrentRoot, 1.0);
+          setTimeout(beginGame, 1200);
+        } else {
+          beginGame();
+        }
       });
     }, 400);
   } else if (gameMode === 'scale') {
@@ -1739,12 +1763,17 @@ async function startGame() {
 
     setTimeout(() => {
       announceScale(scaleRoot, scale.name, () => {
-        playNote(scaleRoot, 0.8);
-        setTimeout(() => {
+        const beginGame = () => {
           gameActive = true;
           roundStart = performance.now();
           gameLoop();
-        }, 1000);
+        };
+        if (AUTO_PLAY_INTRO) {
+          playNote(scaleRoot, 0.8);
+          setTimeout(beginGame, 1000);
+        } else {
+          beginGame();
+        }
       });
     }, 400);
   } else if (gameMode === 'licks') {
@@ -1764,12 +1793,17 @@ async function startGame() {
 
     setTimeout(() => {
       speak(`${currentLick.name}, in ${speechify(currentKeyDisplay)}`, () => {
-        playLick(lickNotes, () => {
+        const beginGame = () => {
           updateDisplay();
           gameActive = true;
           roundStart = performance.now();
           gameLoop();
-        });
+        };
+        if (AUTO_PLAY_INTRO) {
+          playLick(lickNotes, beginGame);
+        } else {
+          beginGame();
+        }
       });
     }, 400);
   } else if (gameMode === 'melody' || gameMode === 'harmonic') {
@@ -1788,20 +1822,29 @@ async function startGame() {
     buildPiano(); // rebuild piano for mode's range
     updateDisplay();
 
+    const beginMelodyGame = () => {
+      updateDisplay();
+      gameActive = true;
+      roundStart = performance.now();
+      gameLoop();
+    };
     const startListening = () => {
-      playMelody(melodyNotes, () => {
-        updateDisplay();
-        gameActive = true;
-        roundStart = performance.now();
-        gameLoop();
-      });
+      if (AUTO_PLAY_INTRO) {
+        playMelody(melodyNotes, beginMelodyGame);
+      } else {
+        beginMelodyGame();
+      }
     };
 
     setTimeout(() => {
       if (gameMode === 'harmonic') {
         // Announce scale name, then play chord, then start
         announceScale(harmonicRoot, SCALES[selectedScale].name, () => {
-          playChord(harmonicRoot, SCALES[selectedScale].chord, startListening);
+          if (AUTO_PLAY_INTRO) {
+            playChord(harmonicRoot, SCALES[selectedScale].chord, startListening);
+          } else {
+            startListening();
+          }
         });
       } else {
         startListening();
@@ -1814,12 +1857,14 @@ async function startGame() {
     updateDisplay();
 
     // Play notes
-    setTimeout(() => {
-      playNote(currentBaseMidi);
-      if (gameMode === 'instrument') {
-        setTimeout(() => playNote(currentTargetMidi), 500);
-      }
-    }, 300);
+    if (AUTO_PLAY_INTRO) {
+      setTimeout(() => {
+        playNote(currentBaseMidi);
+        if (gameMode === 'instrument') {
+          setTimeout(() => playNote(currentTargetMidi), 500);
+        }
+      }, 300);
+    }
 
     gameActive = true;
     roundStart = performance.now();
@@ -2507,6 +2552,8 @@ function loadSettingsUI() {
   document.getElementById('sHold').value = s.holdMs;
   document.getElementById('sSensitivity').value = s.sensitivity;
   document.getElementById('sConfidence').value = s.confidence;
+  document.getElementById('sAnnounceVoice').checked = s.announceVoice !== false;
+  document.getElementById('sAutoPlayIntro').checked = s.autoPlayIntro !== false;
   updateSettingDisplay();
 }
 
@@ -2548,6 +2595,8 @@ function applySettings(s) {
   HOLD_REQUIRED = s.holdMs;
   RMS_THRESHOLD = s.sensitivity / 1000; // 1-20 → 0.001-0.020
   CONFIDENCE_THRESHOLD = s.confidence / 100; // 5-50 → 0.05-0.50
+  ANNOUNCE_VOICE = s.announceVoice !== false;
+  AUTO_PLAY_INTRO = s.autoPlayIntro !== false;
 }
 
 function saveSettings() {
@@ -2564,6 +2613,8 @@ function saveSettings() {
     holdMs: +document.getElementById('sHold').value,
     sensitivity: +document.getElementById('sSensitivity').value,
     confidence: +document.getElementById('sConfidence').value,
+    announceVoice: document.getElementById('sAnnounceVoice').checked,
+    autoPlayIntro: document.getElementById('sAutoPlayIntro').checked,
   };
   localStorage.setItem('notechaser_settings', JSON.stringify(s));
   applySettings(s);
