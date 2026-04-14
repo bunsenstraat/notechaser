@@ -1608,11 +1608,16 @@ function playChordForMode(rootMidi, intervals, callback) {
     const spokenName = speechify(currentChordType.name);
     const chordLabel = rootLabel + ' ' + spokenName;
     speak(chordLabel, () => {
-      playNote(rootMidi, 1.0);
-      setTimeout(() => {
+      if (AUTO_PLAY_INTRO) {
+        playNote(rootMidi, 1.0);
+        setTimeout(() => {
+          melodyPlaying = false;
+          if (callback) callback();
+        }, 1200);
+      } else {
         melodyPlaying = false;
         if (callback) callback();
-      }, 1200);
+      }
     });
   } else if (chordPlayback === 'stack') {
     // Stack only — play all notes simultaneously
@@ -1707,17 +1712,16 @@ async function startGame() {
         roundStart = performance.now();
         gameLoop();
       };
-      const startPlayingChord = () => {
-        if (AUTO_PLAY_INTRO) {
-          playChordForMode(chordRoot, currentChordType.intervals, beginGame);
-        } else {
-          beginGame();
-        }
-      };
       if (chordPlayback === 'sing' || chordPlayback === 'call') {
-        startPlayingChord(); // sing mode announces chord name itself
+        // sing/call always calls playChordForMode — it handles the
+        // auto-play toggle for the root note internally, but still speaks
+        playChordForMode(chordRoot, currentChordType.intervals, beginGame);
+      } else if (AUTO_PLAY_INTRO) {
+        speak(speechify(currentKeyDisplay), () => {
+          playChordForMode(chordRoot, currentChordType.intervals, beginGame);
+        });
       } else {
-        speak(speechify(currentKeyDisplay), startPlayingChord);
+        speak(speechify(currentKeyDisplay), beginGame);
       }
     }, 400);
   } else if (gameMode === 'progression') {
@@ -2085,12 +2089,17 @@ function onSuccess() {
     buildBassRound();
     updateDisplay();
 
+    const beginRound = () => {
+      updateDisplay();
+      roundStart = performance.now();
+      animFrame = requestAnimationFrame(gameLoop);
+    };
     const playNext = () => {
-      playCadence(bassCadenceChords, () => {
-        updateDisplay();
-        roundStart = performance.now();
-        animFrame = requestAnimationFrame(gameLoop);
-      });
+      if (AUTO_PLAY_INTRO) {
+        playCadence(bassCadenceChords, beginRound);
+      } else {
+        beginRound();
+      }
     };
 
     setTimeout(() => {
@@ -2126,11 +2135,20 @@ function onSuccess() {
     chooseNextChord(); // picks chord + places root in right octave around middle C
     updateDisplay();
 
+    const beginRound = () => {
+      roundStart = performance.now();
+      animFrame = requestAnimationFrame(gameLoop);
+    };
     const playNext = () => {
-      playChordForMode(chordRoot, currentChordType.intervals, () => {
-        roundStart = performance.now();
-        animFrame = requestAnimationFrame(gameLoop);
-      });
+      // sing/call always call playChordForMode (it handles auto-play internally for the root)
+      // arpeggio/stack only play when auto-play is on
+      if (chordPlayback === 'sing' || chordPlayback === 'call') {
+        playChordForMode(chordRoot, currentChordType.intervals, beginRound);
+      } else if (AUTO_PLAY_INTRO) {
+        playChordForMode(chordRoot, currentChordType.intervals, beginRound);
+      } else {
+        beginRound();
+      }
     };
 
     setTimeout(() => {
@@ -2167,12 +2185,17 @@ function onSuccess() {
 
     setTimeout(() => {
       speak(`${speechify(currentProgression.name)}, in ${speechify(currentKeyDisplay)}`, () => {
-        playNote(progCurrentRoot, 1.0);
-        setTimeout(() => {
+        const beginRound = () => {
           updateDisplay();
           roundStart = performance.now();
           animFrame = requestAnimationFrame(gameLoop);
-        }, 1200);
+        };
+        if (AUTO_PLAY_INTRO) {
+          playNote(progCurrentRoot, 1.0);
+          setTimeout(beginRound, 1200);
+        } else {
+          beginRound();
+        }
       });
     }, 800);
     return;
@@ -2217,11 +2240,16 @@ function onSuccess() {
 
       setTimeout(() => {
         speak(`${currentLick.name}, in ${speechify(currentKeyDisplay)}`, () => {
-          playLick(lickNotes, () => {
+          const beginRound = () => {
             updateDisplay();
             roundStart = performance.now();
             animFrame = requestAnimationFrame(gameLoop);
-          });
+          };
+          if (AUTO_PLAY_INTRO) {
+            playLick(lickNotes, beginRound);
+          } else {
+            beginRound();
+          }
         });
       }, 800);
     } else {
@@ -2261,12 +2289,17 @@ function onSuccess() {
 
       setTimeout(() => {
         announceScale(scaleRoot, scale.name, () => {
-          playNote(scaleRoot, 0.8);
-          setTimeout(() => {
+          const beginRound = () => {
             updateDisplay();
             roundStart = performance.now();
             animFrame = requestAnimationFrame(gameLoop);
-          }, 1000);
+          };
+          if (AUTO_PLAY_INTRO) {
+            playNote(scaleRoot, 0.8);
+            setTimeout(beginRound, 1000);
+          } else {
+            beginRound();
+          }
         });
       }, 800);
     } else {
@@ -2317,21 +2350,33 @@ function onSuccess() {
 
       // Play chord (harmonic) + melody after a brief pause
       setTimeout(() => {
+        const beginRound = () => {
+          updateDisplay();
+          roundStart = performance.now();
+          animFrame = requestAnimationFrame(gameLoop);
+        };
         const startPlayback = () => {
-          playMelody(melodyNotes, () => {
-            updateDisplay();
-            roundStart = performance.now();
-            animFrame = requestAnimationFrame(gameLoop);
-          });
+          if (AUTO_PLAY_INTRO) {
+            playMelody(melodyNotes, beginRound);
+          } else {
+            beginRound();
+          }
         };
         if (gameMode === 'harmonic') {
           // Announce new key if it changed
+          const playChordThen = (cb) => {
+            if (AUTO_PLAY_INTRO) {
+              playChord(harmonicRoot, SCALES[selectedScale].chord, cb);
+            } else {
+              cb();
+            }
+          };
           if (melodyRound > 0 && melodyRound % 3 === 0) {
             announceScale(harmonicRoot, SCALES[selectedScale].name, () => {
-              playChord(harmonicRoot, SCALES[selectedScale].chord, startPlayback);
+              playChordThen(startPlayback);
             });
           } else {
-            playChord(harmonicRoot, SCALES[selectedScale].chord, startPlayback);
+            playChordThen(startPlayback);
           }
         } else {
           startPlayback();
@@ -2369,9 +2414,11 @@ function onSuccess() {
   // Short delay so player can see the revealed interval in instrument mode
   setTimeout(() => {
     updateDisplay();
-    playNote(currentBaseMidi);
-    if (gameMode === 'instrument') {
-      setTimeout(() => playNote(currentTargetMidi), 500);
+    if (AUTO_PLAY_INTRO) {
+      playNote(currentBaseMidi);
+      if (gameMode === 'instrument') {
+        setTimeout(() => playNote(currentTargetMidi), 500);
+      }
     }
   }, gameMode === 'instrument' ? 800 : 200);
 
