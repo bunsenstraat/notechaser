@@ -169,8 +169,8 @@ const CHORD_TYPES = [
   { name: 'Guide 3/7 Dom 9',      short: '3/7 dom',    intervals: iv('3 b7 9'),        cat: 'guide' },
   { name: 'Guide 7/3 Dom 13',      short: '7/3 dom',    intervals: iv('b7 3 13'),        cat: 'guide' },
   { name: 'Guide 3/7/9 Major',    short: '3/7',    intervals: iv('3 7 9'),            cat: 'guide' },
-  { name: 'Guide 3/7/9 Minor',    short: '3/7',    intervals: iv('b3 7 9'),            cat: 'guide' },
-  
+  { name: 'Guide 3/7/9 Minor',    short: '3/7',    intervals: iv('b3 b7 9'),            cat: 'guide' },
+  { name: 'Guide 3/7/9 Minor Major',    short: '3/7',    intervals: iv('b3 b 9'),            cat: 'guide' },
   // { name: 'Quartal 3',    short: 'Q3',     intervals: iv('1 4 b7'),         cat: 'quartal' },
   // { name: 'Quartal 4',    short: 'Q4',     intervals: iv('1 4 b7 b10'),     cat: 'quartal' },
   // { name: 'Quartal 5',    short: 'Q5',     intervals: iv('1 4 b7 b10 b13'), cat: 'quartal' },
