@@ -1404,6 +1404,7 @@ function buildBassRound() {
     const intervals = bassUseTypeB ? voicing.B : voicing.A;
     const voicingBase = 48 + chordRootPC;
     const voicingMidi = intervals.map(iv => voicingBase + iv);
+    console.log(`Bass chord: ${chord.name}, root MIDI ${bassNote}, voicing MIDI ${voicingMidi}`);
     bassCadenceChords.push(voicingMidi);
   });
 }

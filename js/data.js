@@ -163,9 +163,14 @@ const CHORD_TYPES = [
   { name: 'Guide 3/7 Min',      short: '3/7 min',    intervals: iv('b3 b7'),       cat: 'guide' },
   { name: 'Guide 7/3 Min',      short: '7/3 min',    intervals: iv('b7 b3'),       cat: 'guide' },
   
-  { name: 'Guide 3/7 Dom flat 9',      short: '3/7 dom',    intervals: iv('3 b7', 'b9'),        cat: 'guide' },
-  { name: 'Guide 7/3 Dom flat 9',      short: '7/3 dom',    intervals: iv('b7 3', 'b9'),        cat: 'guide' },
+  { name: 'Guide 3/7 Dom flat 9',      short: '3/7 dom',    intervals: iv('3 b7 b9'),        cat: 'guide' },
+  { name: 'Guide 7/3 Dom flat 13',      short: '7/3 dom',    intervals: iv('b7 3 b13'),        cat: 'guide' },
 
+  { name: 'Guide 3/7 Dom 9',      short: '3/7 dom',    intervals: iv('3 b7 9'),        cat: 'guide' },
+  { name: 'Guide 7/3 Dom 13',      short: '7/3 dom',    intervals: iv('b7 3 13'),        cat: 'guide' },
+  { name: 'Guide 3/7/9 Major',    short: '3/7',    intervals: iv('3 7 9'),            cat: 'guide' },
+  { name: 'Guide 3/7/9 Minor',    short: '3/7',    intervals: iv('b3 7 9'),            cat: 'guide' },
+  
   // { name: 'Quartal 3',    short: 'Q3',     intervals: iv('1 4 b7'),         cat: 'quartal' },
   // { name: 'Quartal 4',    short: 'Q4',     intervals: iv('1 4 b7 b10'),     cat: 'quartal' },
   // { name: 'Quartal 5',    short: 'Q5',     intervals: iv('1 4 b7 b10 b13'), cat: 'quartal' },
@@ -213,11 +218,13 @@ const LICKS = [
 const VOICINGS = {
   'm7':    { A: [3, 7, 10, 14],  B: [10, 14, 15, 19] },
   '7':     { A: [4, 9, 10, 14],  B: [10, 14, 16, 21] },
-  'Maj7':  { A: [4, 7, 11, 14],  B: [11, 14, 16, 19] },
+  'Maj7':  { A: [0, 4, 7, 11],  B: [11, 14, 16, 19] },
   'm7b5':  { A: [3, 6, 10, 14],  B: [10, 14, 15, 18] },
   '7alt':  { A: [4, 8, 10, 13],  B: [10, 13, 16, 20] },
   'm6':    { A: [3, 7, 9, 14],   B: [9, 14, 15, 19] },
   'IV7':   { A: [4, 7, 10, 14],  B: [10, 14, 16, 19] },
+  'thirds': { A: [0, 4],  B: [0,4] },
+  'majortriad': { A: [0, 4, 7],  B: [0,4,7] },
 };
 
 const CADENCES = [
@@ -271,6 +278,14 @@ const CADENCES = [
     ]
   },
   // Single chords
+  {
+    name: 'thirds', short: '3rds', cat: 'single',
+    chords: [ { degRoot: 0, name: 'Thirds', quality: 'thirds' } ]
+  },
+  {
+    name: 'major triad', short: 'Maj triad', cat: 'single',
+    chords: [ { degRoot: 0, name: 'Major triad', quality: 'majortriad' } ]
+  },
   {
     name: 'IMaj7', short: 'I△', cat: 'single',
     chords: [ { degRoot: 0, name: 'IMaj7', quality: 'Maj7' } ]
