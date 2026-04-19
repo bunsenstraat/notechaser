@@ -35,6 +35,14 @@ const INTERVALS = [
   { name: 'Minor 7th',  semitones: 10, short: 'm7' },
   { name: 'Major 7th',  semitones: 11, short: 'M7' },
   { name: 'Octave',     semitones: 12, short: 'P8' },
+  // Jazz extensions — useful for root mode (train b9, 9, #11, 13 from root)
+  { name: 'Flat 9',     semitones: 13, short: 'b9',  jazz: true },
+  { name: '9th',        semitones: 14, short: '9',   jazz: true },
+  { name: 'Sharp 9',    semitones: 15, short: '#9',  jazz: true },
+  { name: '11th',       semitones: 17, short: '11',  jazz: true },
+  { name: 'Sharp 11',   semitones: 18, short: '#11', jazz: true },
+  { name: 'Flat 13',    semitones: 20, short: 'b13', jazz: true },
+  { name: '13th',       semitones: 21, short: '13',  jazz: true },
 ];
 
 const SCALES = [

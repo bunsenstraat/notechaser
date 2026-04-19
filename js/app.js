@@ -9,6 +9,14 @@ function midiToName(midi) {
 function midiToNoteLetter(midi) {
   return NOTE_NAMES[((midi % 12) + 12) % 12];
 }
+// Jazz-friendly enharmonic for MIDI display (e.g. "Bb3" instead of "A#3",
+// weighted per ENHARMONIC_FLAT_WEIGHT). Random per call — cache the result
+// if you need a stable label while the note is on screen.
+function midiToNameJazz(midi) {
+  const pc = ((midi % 12) + 12) % 12;
+  const octave = Math.floor(midi / 12) - 1;
+  return jazzNoteName(pc) + octave;
+}
 
 // Default ranges
 const DEFAULTS = {
@@ -18,13 +26,14 @@ const DEFAULTS = {
   bassLow: 36, bassHigh: 72,          // C2 – C5
   cents: 50, holdMs: 500,
   sensitivity: 5, confidence: 20,
-  announceVoice: true, autoPlayIntro: true, hidePiano: false,
+  announceVoice: true, autoPlayIntro: true, hidePiano: false, hideTarget: false,
 };
 
 // Toggleable behaviors (loaded from settings)
 let ANNOUNCE_VOICE = true;
 let AUTO_PLAY_INTRO = true;
 let HIDE_PIANO = false;
+let HIDE_TARGET = false;
 
 // Mutable ranges (loaded from settings)
 let RANGE_LOW = 48;
@@ -185,6 +194,14 @@ function onMidiNoteChange() {
       if (latestNote === currentTargetMidi) {
         onSuccess();
       }
+    } else if (gameMode === 'voice') {
+      // Voice mode via MIDI: allow playing the target note on a keyboard.
+      // In root style, match by pitch class so jazz extensions (b13/13) can
+      // be played at any octave. In chain style, require the exact MIDI note.
+      const match = intervalStyle === 'root'
+        ? (latestNote % 12 === currentTargetMidi % 12)
+        : (latestNote === currentTargetMidi);
+      if (match) onSuccess();
     }
   }
 }
@@ -213,6 +230,11 @@ function setInputMode(midi) {
 let selectedIntervals = new Set();
 let dirUp = true, dirDown = true;
 let gameMode = 'voice'; // 'voice', 'instrument', or 'melody'
+
+// Interval style — 'chain' (target becomes next base) or 'root' (stay on a root for N rounds, always up)
+let intervalStyle = 'chain';
+let intervalRoundsOnRoot = 0;
+let intervalRoundsPerRoot = 4;
 
 // Melody mode state
 let melodyNotes = [];
@@ -299,6 +321,8 @@ let score = 0;
 let hiScore = parseInt(localStorage.getItem('notechaser_hi') || '0');
 let currentBaseMidi = Math.floor(Math.random() * (RANGE_HIGH - RANGE_LOW + 1)) + RANGE_LOW;
 let currentTargetMidi = 49;
+let currentBaseName = '';   // cached jazz-friendly display (e.g. "Bb3")
+let currentTargetName = ''; // cached jazz-friendly display
 let currentInterval = null;
 let currentDir = 1;
 let holdStart = 0;
@@ -680,6 +704,20 @@ function setMode(m) {
   document.querySelectorAll('.melody-only-setting').forEach(el => {
     el.style.display = isMelody ? '' : 'none';
   });
+  // Hide the Chain/Root style picker in melody mode (doesn't apply there)
+  document.querySelectorAll('.interval-style-only').forEach(el => {
+    el.style.display = isMelody ? 'none' : '';
+  });
+  // In melody mode, also hide root-cycle row since style=chain is forced
+  if (isMelody) {
+    document.getElementById('rootCycleLabel').style.display = 'none';
+    document.getElementById('rootCycleRow').style.display = 'none';
+    document.getElementById('dirSectionLabel').style.display = '';
+    document.getElementById('dirRow').style.display = '';
+  } else {
+    // Restore whatever the current intervalStyle wants
+    setIntervalStyle(intervalStyle);
+  }
   updateStartBtn();
 }
 
@@ -702,10 +740,38 @@ function preset(p) {
     [1,2,4,6].forEach(i => { selectedIntervals.add(i); btns[i].classList.add('selected'); });
   } else if (p === 'triads') {
     [2,3,4,6].forEach(i => { selectedIntervals.add(i); btns[i].classList.add('selected'); });
+  } else if (p === 'diatonic') {
+    // m2, M2, m3, M3, P4, P5, m6, M6, m7, M7, octave (skip tritone)
+    [0,1,2,3,4,6,7,8,9,10,11].forEach(i => { selectedIntervals.add(i); btns[i].classList.add('selected'); });
+  } else if (p === 'jazz') {
+    // Octave + tensions: P8, b9, 9, #9, 11, #11, b13, 13
+    [11,12,13,14,15,16,17,18].forEach(i => {
+      if (INTERVALS[i]) { selectedIntervals.add(i); btns[i].classList.add('selected'); }
+    });
   } else if (p === 'all') {
     INTERVALS.forEach((_, i) => { selectedIntervals.add(i); btns[i].classList.add('selected'); });
   }
   updateStartBtn();
+}
+
+function setIntervalStyle(style) {
+  intervalStyle = style;
+  document.querySelectorAll('[data-istyle]').forEach(b => {
+    b.classList.toggle('selected', b.dataset.istyle === style);
+  });
+  // Root mode is always "up" — hide the direction row, show rounds-per-root
+  const isRoot = (style === 'root');
+  document.getElementById('dirSectionLabel').style.display = isRoot ? 'none' : '';
+  document.getElementById('dirRow').style.display = isRoot ? 'none' : '';
+  document.getElementById('rootCycleLabel').style.display = isRoot ? '' : 'none';
+  document.getElementById('rootCycleRow').style.display = isRoot ? '' : 'none';
+}
+
+function setIntervalRoundsPerRoot(n) {
+  intervalRoundsPerRoot = n;
+  document.querySelectorAll('[data-rcyc]').forEach(b => {
+    b.classList.toggle('selected', parseInt(b.dataset.rcyc) === n);
+  });
 }
 
 function updateStartBtn() {
@@ -748,6 +814,16 @@ function buildPiano() {
     const voiceHi = progCurrentRoot + Math.max(...progCurrentChordType.intervals);
     lo = Math.min(lo, voiceLo);
     hi = Math.max(hi, voiceHi);
+  }
+  // In root-style interval mode, the target may be up to a 13th (21 semitones) above the base.
+  // Extend the piano upward so the target note is visible on the keyboard.
+  if ((gameMode === 'voice' || gameMode === 'instrument') && intervalStyle === 'root' && selectedIntervals.size > 0) {
+    let maxInterval = 0;
+    for (const idx of selectedIntervals) {
+      const iv = INTERVALS[idx];
+      if (iv && iv.semitones > maxInterval) maxInterval = iv.semitones;
+    }
+    if (maxInterval > 0) hi = Math.max(hi, lo + maxInterval);
   }
   for (let midi = lo; midi <= hi; midi++) {
     const noteIdx = midi % 12;
@@ -1456,10 +1532,40 @@ function showScreen(id) {
 function chooseNextChallenge() {
   const intervals = [...selectedIntervals].map(i => INTERVALS[i]);
   const dirs = [];
-  if (dirUp) dirs.push(1);
-  if (dirDown) dirs.push(-1);
+  if (intervalStyle === 'root') {
+    dirs.push(1); // root mode: always up
+  } else {
+    if (dirUp) dirs.push(1);
+    if (dirDown) dirs.push(-1);
+  }
 
-  // Try to pick a valid combo
+  // Root mode: don't skip oversized intervals — we match pitch class, so target can be
+  // displayed high but the singer can sing the note at any octave.
+  if (intervalStyle === 'root') {
+    // Avoid repeating the exact same interval twice in a row when possible
+    let iv = intervals[Math.floor(Math.random() * intervals.length)];
+    if (intervals.length > 1 && currentInterval && iv === currentInterval) {
+      for (let k = 0; k < 5 && iv === currentInterval; k++) {
+        iv = intervals[Math.floor(Math.random() * intervals.length)];
+      }
+    }
+    currentInterval = iv;
+    currentDir = 1;
+    currentTargetMidi = currentBaseMidi + iv.semitones;
+    // If target shares pitch class with the root (octave interval), keep the same
+    // enharmonic spelling as the base so "Bb3" → "Bb4", not "A#4".
+    const samePC = (currentTargetMidi % 12) === (currentBaseMidi % 12);
+    if (samePC && currentBaseName) {
+      const letters = currentBaseName.replace(/-?\d+$/, '');
+      const octave = Math.floor(currentTargetMidi / 12) - 1;
+      currentTargetName = letters + octave;
+    } else {
+      currentTargetName = midiToNameJazz(currentTargetMidi);
+    }
+    return;
+  }
+
+  // Chain mode: try to pick a valid combo
   for (let attempts = 0; attempts < 50; attempts++) {
     const iv = intervals[Math.floor(Math.random() * intervals.length)];
     let d = dirs[Math.floor(Math.random() * dirs.length)];
@@ -1474,6 +1580,7 @@ function chooseNextChallenge() {
       currentInterval = iv;
       currentDir = d;
       currentTargetMidi = finalTarget;
+      currentTargetName = midiToNameJazz(currentTargetMidi);
       return;
     }
   }
@@ -1483,6 +1590,17 @@ function chooseNextChallenge() {
   currentDir = currentBaseMidi > 48 ? -1 : 1;
   currentInterval = iv;
   currentTargetMidi = currentBaseMidi + currentDir * iv.semitones;
+  currentTargetName = midiToNameJazz(currentTargetMidi);
+}
+
+// Pick a low root that gives headroom for jazz intervals (up to 21 semitones / 13th)
+function pickRootBaseMidi() {
+  // Stay in the lower third of the available range so large intervals fit comfortably
+  const lo = getRangeAbsLow();
+  const hi = getRangeAbsHigh();
+  // Prefer the bottom octave (or less, if the range is small)
+  const span = Math.min(12, Math.max(1, hi - lo));
+  return lo + Math.floor(Math.random() * (span + 1));
 }
 
 function updateDisplay() {
@@ -1573,12 +1691,16 @@ function updateDisplay() {
     document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay both notes';
     updatePianoHighlights(null, null, null);
   } else {
-    document.getElementById('intervalDisplay').textContent = `${currentInterval.name} ${dirLabel}`;
-    document.getElementById('noteFrom').textContent = midiToName(currentBaseMidi);
-    document.getElementById('noteTarget').textContent = midiToName(currentTargetMidi);
+    const styleTag = intervalStyle === 'root' ? ' · Root' : '';
+    document.getElementById('intervalDisplay').textContent = `${currentInterval.name} ${dirLabel}${styleTag}`;
+    document.getElementById('noteFrom').textContent = currentBaseName || midiToNameJazz(currentBaseMidi);
+    document.getElementById('noteTarget').textContent = HIDE_TARGET ? '?' : (currentTargetName || midiToNameJazz(currentTargetMidi));
     document.getElementById('arrowDir').innerHTML = currentDir > 0 ? '&#9650;' : '&#9660;';
     document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay base note';
-    updatePianoHighlights(currentBaseMidi, currentTargetMidi, null);
+    // Hide the target on the piano too when HIDE_TARGET is on, unless we're in instrument mode
+    // (instrument mode already doesn't highlight a target; see onSuccess reveal).
+    const pianoTarget = HIDE_TARGET ? null : currentTargetMidi;
+    updatePianoHighlights(currentBaseMidi, pianoTarget, null);
   }
 }
 
@@ -1857,7 +1979,13 @@ async function startGame() {
       }
     }, 400);
   } else {
-    currentBaseMidi = Math.floor(Math.random() * (getRangeHigh() - getRangeLow() + 1)) + getRangeLow();
+    if (intervalStyle === 'root') {
+      currentBaseMidi = pickRootBaseMidi();
+      intervalRoundsOnRoot = 0;
+    } else {
+      currentBaseMidi = Math.floor(Math.random() * (getRangeHigh() - getRangeLow() + 1)) + getRangeLow();
+    }
+    currentBaseName = midiToNameJazz(currentBaseMidi);
     buildPiano(); // rebuild piano for mode's range
     chooseNextChallenge();
     updateDisplay();
@@ -1996,7 +2124,16 @@ function gameLoop() {
     } else {
       // All other modes: single target
       const targetMidi = gameMode === 'licks' ? lickNotes[lickNoteIndex] : gameMode === 'scale' ? scaleNotes[scaleNoteIndex] : (gameMode === 'melody' || gameMode === 'harmonic') ? melodyNotes[melodyIndex] : currentTargetMidi;
-      const centsOff = (midi - targetMidi) * 100;
+      // In voice mode with root-style intervals, match pitch class (any octave).
+      // This lets singers nail a b13 or 13 by singing the correct pitch class at a reachable octave.
+      let centsOff;
+      if (gameMode === 'voice' && intervalStyle === 'root') {
+        let pcDiff = ((midi - targetMidi) % 12 + 12) % 12;
+        if (pcDiff > 6) pcDiff -= 12;
+        centsOff = pcDiff * 100;
+      } else {
+        centsOff = (midi - targetMidi) * 100;
+      }
       const needlePos = 50 + (centsOff / 400) * 100;
       const clampedPos = Math.max(2, Math.min(98, needlePos));
       needle.style.left = clampedPos + '%';
@@ -2404,12 +2541,25 @@ function onSuccess() {
   if (gameMode === 'instrument') {
     const dirLabel = currentDir > 0 ? 'Up' : 'Down';
     document.getElementById('intervalDisplay').textContent = `${currentInterval.name} ${dirLabel}`;
-    document.getElementById('noteFrom').textContent = midiToName(currentBaseMidi);
-    document.getElementById('noteTarget').textContent = midiToName(currentTargetMidi);
+    document.getElementById('noteFrom').textContent = currentBaseName || midiToNameJazz(currentBaseMidi);
+    document.getElementById('noteTarget').textContent = currentTargetName || midiToNameJazz(currentTargetMidi);
   }
 
-  // New base = old target
-  currentBaseMidi = currentTargetMidi;
+  // Root mode: keep the same base for N rounds, then pick a new random root.
+  // Chain mode: new base = old target (carry over the display name so the
+  // enharmonic spelling stays consistent with what was just shown).
+  if (intervalStyle === 'root') {
+    intervalRoundsOnRoot++;
+    if (intervalRoundsOnRoot >= intervalRoundsPerRoot) {
+      currentBaseMidi = pickRootBaseMidi();
+      currentBaseName = midiToNameJazz(currentBaseMidi);
+      intervalRoundsOnRoot = 0;
+    }
+    // else: keep currentBaseMidi and currentBaseName
+  } else {
+    currentBaseMidi = currentTargetMidi;
+    currentBaseName = currentTargetName;
+  }
 
   chooseNextChallenge();
 
@@ -2604,6 +2754,7 @@ function loadSettingsUI() {
   document.getElementById('sAnnounceVoice').checked = s.announceVoice !== false;
   document.getElementById('sAutoPlayIntro').checked = s.autoPlayIntro !== false;
   document.getElementById('sHidePiano').checked = s.hidePiano === true;
+  document.getElementById('sHideTarget').checked = s.hideTarget === true;
   updateSettingDisplay();
 }
 
@@ -2648,7 +2799,10 @@ function applySettings(s) {
   ANNOUNCE_VOICE = s.announceVoice !== false;
   AUTO_PLAY_INTRO = s.autoPlayIntro !== false;
   HIDE_PIANO = s.hidePiano === true;
+  HIDE_TARGET = s.hideTarget === true;
   applyHidePiano();
+  // Re-render current round if game is active so HIDE_TARGET takes effect immediately
+  if (gameActive) updateDisplay();
 }
 
 function applyHidePiano() {
@@ -2673,6 +2827,7 @@ function saveSettings() {
     announceVoice: document.getElementById('sAnnounceVoice').checked,
     autoPlayIntro: document.getElementById('sAutoPlayIntro').checked,
     hidePiano: document.getElementById('sHidePiano').checked,
+    hideTarget: document.getElementById('sHideTarget').checked,
   };
   localStorage.setItem('notechaser_settings', JSON.stringify(s));
   applySettings(s);

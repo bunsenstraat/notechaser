@@ -37,16 +37,32 @@
       <div class="section-label">Intervals</div>
       <div class="interval-grid" id="intervalGrid"></div>
 
-      <div class="section-label">Direction</div>
-      <div class="direction-row">
+      <div class="section-label interval-style-only">Style</div>
+      <div class="direction-row interval-style-only">
+        <button class="dir-btn selected" data-istyle="chain" onclick="setIntervalStyle('chain')">&#128279; Chain</button>
+        <button class="dir-btn" data-istyle="root" onclick="setIntervalStyle('root')">&#127919; Root</button>
+      </div>
+
+      <div class="section-label" id="dirSectionLabel">Direction</div>
+      <div class="direction-row" id="dirRow">
         <button class="dir-btn selected" data-dir="up" onclick="toggleDir('up')">&#9650; Up</button>
         <button class="dir-btn selected" data-dir="down" onclick="toggleDir('down')">&#9660; Down</button>
+      </div>
+
+      <div class="section-label" id="rootCycleLabel" style="display:none">Rounds per Root</div>
+      <div class="direction-row" id="rootCycleRow" style="display:none">
+        <button class="dir-btn cycle-btn" data-rcyc="2" onclick="setIntervalRoundsPerRoot(2)">2</button>
+        <button class="dir-btn cycle-btn selected" data-rcyc="4" onclick="setIntervalRoundsPerRoot(4)">4</button>
+        <button class="dir-btn cycle-btn" data-rcyc="6" onclick="setIntervalRoundsPerRoot(6)">6</button>
+        <button class="dir-btn cycle-btn" data-rcyc="8" onclick="setIntervalRoundsPerRoot(8)">8</button>
       </div>
 
       <div class="section-label">Presets</div>
       <div class="preset-row">
         <button class="preset-btn" onclick="preset('easy')">Easy</button>
         <button class="preset-btn" onclick="preset('triads')">Triads</button>
+        <button class="preset-btn" onclick="preset('diatonic')">Diatonic</button>
+        <button class="preset-btn" onclick="preset('jazz')">Jazz</button>
         <button class="preset-btn" onclick="preset('all')">All</button>
         <button class="preset-btn" onclick="preset('none')">Clear</button>
       </div>
@@ -300,6 +316,10 @@
       <div class="setting-row">
         <span class="setting-label">Hide piano keyboard</span>
         <input type="checkbox" id="sHidePiano">
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Hide target note (intervals)</span>
+        <input type="checkbox" id="sHideTarget">
       </div>
     </div>
 
