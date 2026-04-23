@@ -14,6 +14,7 @@
   <div class="header">
     <div class="logo">NoteChaser</div>
     <div class="logo-sub">Ear Training</div>
+    <button class="progress-btn" id="progressBtn" onclick="openProgress()" title="Progress & overlearning stats">&#128202;</button>
     <button class="settings-gear" id="settingsGear" onclick="openSettings()">&#9881;</button>
   </div>
 
@@ -291,6 +292,11 @@
         <input type="range" class="setting-slider" id="sHold" min="200" max="1500" value="500" step="50" oninput="updateSettingDisplay()">
         <span class="setting-value" id="sHoldVal">500</span>
       </div>
+      <div class="setting-row" title="How long an off-target pitch must be sustained before it counts as a mistake. Longer = more forgiving of slides/vibrato.">
+        <span class="setting-label">Mistake Hold (ms)</span>
+        <input type="range" class="setting-slider" id="sMistakeHold" min="200" max="2000" value="700" step="50" oninput="updateSettingDisplay()">
+        <span class="setting-value" id="sMistakeHoldVal">700</span>
+      </div>
       <div class="setting-row">
         <span class="setting-label">Mic Sensitivity</span>
         <input type="range" class="setting-slider" id="sSensitivity" min="1" max="20" value="5" step="1" oninput="updateSettingDisplay()">
@@ -327,6 +333,26 @@
     <button class="settings-reset" onclick="resetSettings()">Reset to Defaults</button>
   </div>
 
+  <!-- PROGRESS SCREEN -->
+  <div id="progress" class="settings-screen">
+    <button class="settings-back" onclick="closeProgress()">&#9664; Back</button>
+    <div class="settings-title">PROGRESS</div>
+    <div class="progress-summary" id="progressSummary"></div>
+    <div class="progress-filter-row">
+      <button class="preset-btn progress-filter-btn selected" data-pfilter="all" onclick="setProgressFilter('all')">All</button>
+      <button class="preset-btn progress-filter-btn" data-pfilter="voice" onclick="setProgressFilter('voice')">Intervals</button>
+      <button class="preset-btn progress-filter-btn" data-pfilter="chord" onclick="setProgressFilter('chord')">Chords</button>
+      <button class="preset-btn progress-filter-btn" data-pfilter="progression" onclick="setProgressFilter('progression')">Prog</button>
+      <button class="preset-btn progress-filter-btn" data-pfilter="scale" onclick="setProgressFilter('scale')">Scales</button>
+      <button class="preset-btn progress-filter-btn" data-pfilter="licks" onclick="setProgressFilter('licks')">Licks</button>
+      <button class="preset-btn progress-filter-btn" data-pfilter="bass" onclick="setProgressFilter('bass')">Bass</button>
+      <button class="preset-btn progress-filter-btn" data-pfilter="weakest" onclick="setProgressFilter('weakest')">Weakest</button>
+      <button class="preset-btn progress-filter-btn" data-pfilter="mastered" onclick="setProgressFilter('mastered')">Mastered</button>
+    </div>
+    <div class="progress-list" id="progressList"></div>
+    <button class="settings-reset" onclick="resetProgressConfirm()">Reset All Progress</button>
+  </div>
+
   <!-- GAME SCREEN -->
   <div id="game" class="screen">
     <div class="game-top">
@@ -358,6 +384,7 @@
 
     <div class="replay-hint" id="replayHint">Press <kbd>SPACE</kbd> or tap here to replay base note</div>
     <div class="replay-hint answer-btn" id="answerBtn" style="display:none;" onclick="playAnswer()">🎹 Play Answer (hear the chord)</div>
+    <div class="skip-hint" id="skipHint" title="Skip this assignment — it gets marked as a mistake for overlearning">Press <kbd>X</kbd> to skip (counts as mistake)</div>
 
     <div class="piano-wrap">
       <div class="piano" id="piano"></div>
@@ -382,6 +409,7 @@
     </div>
 
     <div class="streak-dots" id="streakDots"></div>
+    <div class="mastery-display" id="masteryDisplay" style="display:none" title="Overlearning progress for this specific assignment — streak / required, with mistakes and ★ when mastered"></div>
 
     <div class="success-flash" id="successFlash"></div>
   </div>
@@ -400,6 +428,7 @@
 </div>
 
 <script src="js/data.js"></script>
+<script src="js/progress.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

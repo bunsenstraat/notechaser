@@ -24,7 +24,7 @@ const DEFAULTS = {
   chordSingLow: 45, chordSingHigh: 63, // A2 – Eb4
   instLow: 48, instHigh: 72,          // C3 – C5
   bassLow: 36, bassHigh: 72,          // C2 – C5
-  cents: 50, holdMs: 500,
+  cents: 50, holdMs: 500, mistakeHoldMs: 700,
   sensitivity: 5, confidence: 20,
   announceVoice: true, autoPlayIntro: true, hidePiano: false, hideTarget: false,
 };
@@ -130,6 +130,14 @@ function onMidiNoteChange() {
       chordTargetNotes = new Set();
       updateDisplay();
       onSuccess();
+    } else if (chordTargetNotes.size > 0 && midiHeldNotes.size > 0) {
+      // Any held note not in the target voicing taints this chord round.
+      for (const n of midiHeldNotes) {
+        if (!chordTargetNotes.has(n) && !chordHitNotes.has(n)) {
+          markAssignmentMistake();
+          break;
+        }
+      }
     }
   } else if (gameMode === 'progression') {
     // Progression mode: check if held notes match current chord target
@@ -149,6 +157,9 @@ function onMidiNoteChange() {
       playChordConfirmBeep();
       updateDisplay();
 
+      // Commit THIS chord's progress before we advance the index
+      commitAssignmentResult(false);
+
       // Move to next chord in progression
       progChordIndex++;
       if (progChordIndex >= currentProgression.chords.length) {
@@ -157,9 +168,16 @@ function onMidiNoteChange() {
       } else {
         // Set up next chord, reset timer
         setupProgChord();
+        beginAssignmentAttempt();
         buildPiano();
         updateDisplay();
         roundStart = performance.now();
+      }
+    } else if (progTargetNotes.size > 0 && midiHeldNotes.size > 0) {
+      // Any held pitch class that is NOT a target or already-hit taints the round
+      const allowed = new Set([...progTargetNotes, ...progHitNotes].map(n => n % 12));
+      for (const pc of heldPCs) {
+        if (!allowed.has(pc)) { markAssignmentMistake(); break; }
       }
     }
   } else {
@@ -171,28 +189,42 @@ function onMidiNoteChange() {
       // Match pitch class
       const targetMidi = bassNotes[bassIndex];
       if (latestNote % 12 === targetMidi % 12) {
+        // Commit THIS bass note's progress before advancing
+        commitAssignmentResult(false);
         bassIndex++;
         playChordConfirmBeep();
         updateDisplay();
         if (bassIndex >= bassNotes.length) {
           onSuccess();
+        } else {
+          beginAssignmentAttempt();
         }
+      } else {
+        markAssignmentMistake();
       }
     } else if (gameMode === 'licks') {
       if (latestNote === lickNotes[lickNoteIndex]) {
         onSuccess();
+      } else {
+        markAssignmentMistake();
       }
     } else if (gameMode === 'scale') {
       if (latestNote === scaleNotes[scaleNoteIndex]) {
         onSuccess();
+      } else {
+        markAssignmentMistake();
       }
     } else if (gameMode === 'melody' || gameMode === 'harmonic') {
       if (latestNote === melodyNotes[melodyIndex]) {
         onSuccess();
+      } else {
+        markAssignmentMistake();
       }
     } else if (gameMode === 'instrument') {
       if (latestNote === currentTargetMidi) {
         onSuccess();
+      } else {
+        markAssignmentMistake();
       }
     } else if (gameMode === 'voice') {
       // Voice mode via MIDI: allow playing the target note on a keyboard.
@@ -202,6 +234,7 @@ function onMidiNoteChange() {
         ? (latestNote % 12 === currentTargetMidi % 12)
         : (latestNote === currentTargetMidi);
       if (match) onSuccess();
+      else markAssignmentMistake();
     }
   }
 }
@@ -327,6 +360,7 @@ let currentInterval = null;
 let currentDir = 1;
 let holdStart = 0;
 let HOLD_REQUIRED = 500; // ms to hold correct pitch
+let MISTAKE_HOLD_REQUIRED = 700; // ms to sustain an off-target pitch before it counts as a mistake
 let TIMEOUT = 7000; // ms before game over
 let roundStart = 0;
 let animFrame = null;
@@ -916,9 +950,17 @@ document.addEventListener('keydown', (e) => {
   if (e.code === 'Space' && gameActive) {
     e.preventDefault();
     replayBaseNote();
+  } else if ((e.key === 'x' || e.key === 'X') && gameActive) {
+    // Skip / give-up: mark the current assignment as a mistake and move on.
+    // Useful in mic modes when you know you blew it but the timer hasn't run out.
+    e.preventDefault();
+    skipCurrentAssignment();
   }
 });
 document.getElementById('replayHint')?.addEventListener('click', replayBaseNote);
+document.getElementById('skipHint')?.addEventListener('click', () => {
+  if (gameActive) skipCurrentAssignment();
+});
 
 function updatePianoHighlights(fromMidi, targetMidi, singingMidi) {
   document.querySelectorAll('.piano-key').forEach(k => {
@@ -1019,6 +1061,27 @@ function playFailSound() {
   g.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
   osc.start(now);
   osc.stop(now + 0.5);
+}
+
+// Short "nope" chime — fires when a mistake is detected mid-round. Much
+// softer than playFailSound (which is reserved for game-over). Two quick
+// descending triangle tones: F#4 → D4 (minor third down), total ~240ms.
+function playMistakeChime() {
+  initAudio();
+  const now = audioCtx.currentTime;
+  [0, 0.06].forEach((t, i) => {
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = [369.99, 293.66][i]; // F#4, D4
+    osc.connect(g);
+    g.connect(masterGain);
+    g.gain.setValueAtTime(0, now + t);
+    g.gain.linearRampToValueAtTime(0.08, now + t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.18);
+    osc.start(now + t);
+    osc.stop(now + t + 0.18);
+  });
 }
 
 // ── PITCH DETECTION (Autocorrelation) ──
@@ -1525,7 +1588,11 @@ function updateBassPiano(singingMidi) {
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('settings').classList.remove('active');
+  const progressEl = document.getElementById('progress');
+  if (progressEl) progressEl.classList.remove('active');
   document.getElementById('settingsGear').style.display = id === 'setup' ? '' : 'none';
+  const progressBtn = document.getElementById('progressBtn');
+  if (progressBtn) progressBtn.style.display = id === 'setup' ? '' : 'none';
   document.getElementById(id).classList.add('active');
 }
 
@@ -1609,6 +1676,8 @@ function updateDisplay() {
   document.getElementById('hiScoreGame').textContent = `BEST: ${hiScore}`;
   // Hide answer button by default; chord mode will show it for sing
   document.getElementById('answerBtn').style.display = 'none';
+  // Refresh the overlearning mastery ticker for the current assignment
+  renderMasteryDisplay();
 
   if (gameMode === 'bass') {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreBass}`;
@@ -1787,6 +1856,7 @@ async function startGame() {
   document.getElementById('holdProgress').style.width = '0%';
   document.getElementById('singingNote').innerHTML = '&nbsp;';
 
+  beginAssignmentAttempt(); // first round of the game starts clean
   showScreen('game');
 
   if (gameMode === 'bass') {
@@ -2060,13 +2130,15 @@ function gameLoop() {
       needle.className = absCents < CENTS_TOLERANCE ? 'pitch-needle' : absCents < CENTS_TOLERANCE * 2 ? 'pitch-needle close' : 'pitch-needle off-pitch';
       singingEl.innerHTML = `You: <span>${noteName}</span>`;
       updateBassPiano(roundedMidi);
+      mistakeHoldCheck(roundedMidi, absCents < CENTS_TOLERANCE, now);
 
       if (absCents < CENTS_TOLERANCE) {
         if (holdStart === 0) holdStart = now;
         const held = now - holdStart;
         holdBar.style.width = Math.min(100, (held / HOLD_REQUIRED) * 100) + '%';
         if (held >= HOLD_REQUIRED) {
-          // Bass note confirmed
+          // Bass note confirmed — commit this bass note's progress first.
+          commitAssignmentResult(false);
           bassIndex++;
           holdStart = 0;
           holdBar.style.width = '0%';
@@ -2076,6 +2148,7 @@ function gameLoop() {
             onSuccess();
             return;
           }
+          beginAssignmentAttempt();
         }
       } else {
         holdStart = 0;
@@ -2097,6 +2170,16 @@ function gameLoop() {
       needle.className = absCents < CENTS_TOLERANCE ? 'pitch-needle' : absCents < CENTS_TOLERANCE * 2 ? 'pitch-needle close' : 'pitch-needle off-pitch';
       singingEl.innerHTML = `You: <span>${noteName}</span>`;
       updateChordPiano(roundedMidi);
+
+      // Mistake detection: off ALL chord notes (target + already-hit) when sustained.
+      // Sitting on a note the singer already nailed is still legit; we only flag
+      // a pitch held outside every chord tone.
+      let onAnyChordTone = false;
+      for (const t of chordTargetNotes) { if (Math.abs((midi - t) * 100) < CENTS_TOLERANCE) { onAnyChordTone = true; break; } }
+      if (!onAnyChordTone) {
+        for (const t of chordHitNotes) { if (Math.abs((midi - t) * 100) < CENTS_TOLERANCE) { onAnyChordTone = true; break; } }
+      }
+      mistakeHoldCheck(roundedMidi, onAnyChordTone, now);
 
       if (absCents < CENTS_TOLERANCE && bestTarget !== null) {
         if (holdingForMidi !== bestTarget) { holdStart = now; holdingForMidi = bestTarget; }
@@ -2156,6 +2239,9 @@ function gameLoop() {
         updatePianoHighlights(currentBaseMidi, currentTargetMidi, roundedMidi);
       }
 
+      // Mic-mode mistake detection — sustained off-target pitch taints the round
+      mistakeHoldCheck(roundedMidi, absCents < CENTS_TOLERANCE, now);
+
       if (absCents < CENTS_TOLERANCE) {
         if (holdStart === 0) holdStart = now;
         const held = now - holdStart;
@@ -2176,6 +2262,9 @@ function gameLoop() {
     holdStart = 0;
     holdingForMidi = null;
     holdBar.style.width = '0%';
+    // No signal = reset wrong-hold so a brief pause doesn't count against them
+    wrongHoldStart = 0;
+    wrongHoldingPC = null;
     if (gameMode === 'bass') {
       updateBassPiano(null);
     } else if (gameMode === 'chord') {
@@ -2197,25 +2286,235 @@ function gameLoop() {
   animFrame = requestAnimationFrame(gameLoop);
 }
 
-function onSuccess() {
-  playSuccessChime();
+// ── Overlearning tracker integration ──
+// A round is tainted if the player sang/played a wrong note before completing.
+// commitAssignmentResult() is called at success and at timeout; depending on
+// the tainted flag we record a mistake or a clean success on the per-assignment
+// progress record (see js/progress.js).
+let currentRoundHasMistake = false;
 
-  // Flash
-  const flash = document.getElementById('successFlash');
-  flash.classList.remove('show');
-  void flash.offsetWidth;
-  flash.classList.add('show');
+// Mic-mode wrong-pitch hold tracking — mirrors the correct-pitch hold mechanic.
+// If the singer sustains an off-target pitch for HOLD_REQUIRED ms, treat it as
+// an intentional wrong note and mark the round as tainted. Drift/slides don't
+// trigger it because they don't sustain on a single pitch class.
+let wrongHoldStart = 0;
+let wrongHoldingPC = null;
+
+function beginAssignmentAttempt() {
+  currentRoundHasMistake = false;
+  wrongHoldStart = 0;
+  wrongHoldingPC = null;
+}
+
+function markAssignmentMistake() {
+  // One mistake per round — additional wrong notes in the same round don't
+  // stack. We simply flag the round as tainted; the mistake counter is
+  // incremented exactly once at round-commit time.
+  if (currentRoundHasMistake) return; // already tainted, no need to re-render
+  currentRoundHasMistake = true;
+  playMistakeChime();
+  renderMasteryDisplay(); // paint the "tainted" state
+}
+
+// Call from each mic-mode branch after pitch detection. `isTargetMatch` is the
+// mode's own "did the singer hit the target right now" decision.
+// `roundedMidi` is the quantized sung pitch (or null if no audio).
+function mistakeHoldCheck(roundedMidi, isTargetMatch, now) {
+  // Once the round is tainted, stop tracking — a single mistake per round
+  // is enough (the mistake counter is incremented at commit time).
+  if (currentRoundHasMistake) return;
+  if (isTargetMatch || roundedMidi == null) {
+    wrongHoldStart = 0;
+    wrongHoldingPC = null;
+    return;
+  }
+  const pc = ((roundedMidi % 12) + 12) % 12;
+  if (wrongHoldingPC !== pc) {
+    // New off-target pitch class — start the hold timer
+    wrongHoldingPC = pc;
+    wrongHoldStart = now;
+  } else if (wrongHoldStart > 0 && (now - wrongHoldStart) >= MISTAKE_HOLD_REQUIRED) {
+    // Held the same wrong pitch class long enough — count as a mistake
+    markAssignmentMistake();
+    wrongHoldStart = 0;
+    wrongHoldingPC = null;
+  }
+}
+
+function skipCurrentAssignment() {
+  if (!gameActive || melodyPlaying) return;
+  // Mark the round tainted — onSuccess will commit as mistake and skip reward
+  markAssignmentMistake();
+
+  // Progression / bass: skip just the current sub-chord (advance one step)
+  if (gameMode === 'progression' && currentProgression) {
+    commitAssignmentResult(false);
+    progChordIndex++;
+    if (progChordIndex >= currentProgression.chords.length) {
+      onSuccess(); // whole progression done → onSuccess transitions
+    } else {
+      setupProgChord();
+      beginAssignmentAttempt();
+      buildPiano();
+      updateDisplay();
+      roundStart = performance.now();
+    }
+    return;
+  }
+  if (gameMode === 'bass' && currentCadence && bassNotes.length > 0) {
+    commitAssignmentResult(false);
+    bassIndex++;
+    if (bassIndex >= bassNotes.length) {
+      onSuccess();
+    } else {
+      beginAssignmentAttempt();
+      updateDisplay();
+      roundStart = performance.now();
+    }
+    return;
+  }
+
+  // Multi-note single-assignment (scale/lick/melody): jump to final note so
+  // the existing "all notes completed" branch of onSuccess handles advance.
+  if (gameMode === 'scale' && scaleNotes.length > 0) {
+    scaleNoteIndex = scaleNotes.length - 1;
+  } else if (gameMode === 'licks' && lickNotes.length > 0) {
+    lickNoteIndex = lickNotes.length - 1;
+  } else if ((gameMode === 'melody' || gameMode === 'harmonic') && melodyNotes.length > 0) {
+    melodyIndex = melodyNotes.length - 1;
+  }
+
+  // Single-note modes (voice / instrument / chord) just advance via onSuccess
+  onSuccess();
+}
+
+function currentAssignmentInfo() {
+  try {
+    if (gameMode === 'voice' || gameMode === 'instrument') {
+      if (!currentInterval) return null;
+      const idx = INTERVALS.indexOf(currentInterval);
+      if (idx < 0) return null;
+      if (intervalStyle === 'root') {
+        return { key: `${gameMode}:root:${idx}`, label: `${currentInterval.name} up (root)`, mode: gameMode };
+      }
+      const dir = currentDir > 0 ? 'up' : 'down';
+      return { key: `${gameMode}:chain:${idx}:${dir}`, label: `${currentInterval.name} ${dir}`, mode: gameMode };
+    }
+    if (gameMode === 'chord') {
+      if (!currentChordType) return null;
+      const idx = CHORD_TYPES.indexOf(currentChordType);
+      if (idx < 0) return null;
+      return { key: `chord:${idx}`, label: currentChordType.name, mode: 'chord' };
+    }
+    if (gameMode === 'progression') {
+      if (!currentProgression) return null;
+      const pIdx = PROGRESSIONS.indexOf(currentProgression);
+      if (pIdx < 0) return null;
+      const chord = currentProgression.chords[progChordIndex];
+      const chordLabel = chord ? chord.chordName : `#${progChordIndex + 1}`;
+      return { key: `progression:${pIdx}:${progChordIndex}`, label: `${currentProgression.name} — ${chordLabel}`, mode: 'progression' };
+    }
+    if (gameMode === 'scale') {
+      if (currentScaleForSing === null || currentScaleForSing === undefined) return null;
+      const scale = SCALES[currentScaleForSing];
+      if (!scale) return null;
+      const dir = scaleCurrentDir || 'up';
+      return { key: `scale:${currentScaleForSing}:${dir}`, label: `${scale.name} ${dir}`, mode: 'scale' };
+    }
+    if (gameMode === 'licks') {
+      if (!currentLick) return null;
+      const idx = LICKS.indexOf(currentLick);
+      if (idx < 0) return null;
+      return { key: `lick:${idx}`, label: currentLick.name, mode: 'licks' };
+    }
+    if (gameMode === 'bass') {
+      if (!currentCadence) return null;
+      const cIdx = CADENCES.indexOf(currentCadence);
+      if (cIdx < 0) return null;
+      const chord = currentCadence.chords[bassIndex];
+      const chordLabel = chord ? chord.name : `#${bassIndex + 1}`;
+      return { key: `bass:${cIdx}:${bassIndex}`, label: `${currentCadence.name} — ${chordLabel}`, mode: 'bass' };
+    }
+    if (gameMode === 'melody') {
+      return { key: `melody:len${melodyLength}`, label: `Melody length ${melodyLength}`, mode: 'melody' };
+    }
+    if (gameMode === 'harmonic') {
+      const scale = SCALES[selectedScale];
+      const name = scale ? scale.name : '';
+      return { key: `harmonic:${selectedScale}:len${melodyLength}`, label: `${name} harmonic len ${melodyLength}`, mode: 'harmonic' };
+    }
+  } catch (e) {
+    console.warn('currentAssignmentInfo failed', e);
+  }
+  return null;
+}
+
+// Commit the current round's outcome to the progress tracker, then reset the
+// tainted flag for the next round. Called both on successful completion and
+// on timeout (via endGame).
+function commitAssignmentResult(wasTimeout) {
+  const info = currentAssignmentInfo();
+  if (!info) {
+    currentRoundHasMistake = false;
+    return null;
+  }
+  const result = (wasTimeout || currentRoundHasMistake)
+    ? progressRecordMistake(info.key, info.label, info.mode)
+    : progressRecordSuccess(info.key, info.label, info.mode);
+  currentRoundHasMistake = false;
+  renderMasteryDisplay();
+  return result;
+}
+
+function renderMasteryDisplay() {
+  const el = document.getElementById('masteryDisplay');
+  if (!el) return;
+  const info = currentAssignmentInfo();
+  if (!info) { el.textContent = ''; el.style.display = 'none'; return; }
+  // Peek — don't auto-create a record just for display; show fresh defaults
+  // if we haven't tracked this assignment before.
+  const stats = progressPeek(info.key) || { currentStreak: 0, mistakes: 0, mastered: false };
+  const required = progressRequiredStreak(stats);
+  const labelShort = (info.label || '').length > 28 ? info.label.slice(0, 27) + '…' : info.label;
+  const masteredBadge = stats.mastered ? ' ★' : '';
+  const mistakeBadge = stats.mistakes > 0 ? ` · ${stats.mistakes} miss` : '';
+  el.textContent = `${labelShort} — ${stats.currentStreak}/${required}${mistakeBadge}${masteredBadge}`;
+  el.style.display = '';
+  el.classList.toggle('tainted', currentRoundHasMistake);
+  el.classList.toggle('mastered', stats.mastered);
+}
+
+function onSuccess() {
+  // Capture the taint flag up-front; branch commits will reset it, but we need
+  // it below to decide whether to celebrate and increment the session score.
+  // A tainted round (wrong note / skipped) advances the game but doesn't count
+  // as a success — that's the whole point of the overlearning model.
+  const wasClean = !currentRoundHasMistake;
+
+  // Note: overlearning progress is committed per-branch below — not here, because
+  // in multi-note modes (lick, scale, melody) onSuccess fires once per note and
+  // we only want to commit when the WHOLE assignment is done.
+
+  if (wasClean) {
+    playSuccessChime();
+    const flash = document.getElementById('successFlash');
+    flash.classList.remove('show');
+    void flash.offsetWidth;
+    flash.classList.add('show');
+  }
 
   holdStart = 0;
   holdingForMidi = null;
   document.getElementById('holdProgress').style.width = '0%';
 
   if (gameMode === 'bass') {
-    // Cadence complete!
+    // Cadence complete! (The final bass note was committed inline where
+    // bassIndex is advanced; onSuccess just handles the cadence transition.)
+    // Per-bass-note cleanliness is tracked in the assignment records —
+    // the session score just counts completed cadences.
     cancelAnimationFrame(animFrame);
     score++;
     document.getElementById('scoreDisplay').textContent = score;
-
     const dot = document.createElement('div');
     dot.className = 'streak-dot';
     document.getElementById('streakDots').appendChild(dot);
@@ -2226,6 +2525,7 @@ function onSuccess() {
     const indices = [...selectedCadences];
     currentCadence = CADENCES[indices[Math.floor(Math.random() * indices.length)]];
     buildBassRound();
+    beginAssignmentAttempt(); // first bass note of the fresh cadence
     updateDisplay();
 
     const beginRound = () => {
@@ -2255,12 +2555,15 @@ function onSuccess() {
   if (gameMode === 'chord') {
     // Chord complete!
     cancelAnimationFrame(animFrame);
-    score++;
-    document.getElementById('scoreDisplay').textContent = score;
-
-    const dot = document.createElement('div');
-    dot.className = 'streak-dot';
-    document.getElementById('streakDots').appendChild(dot);
+    // Commit the completed chord before we change currentChordType.
+    commitAssignmentResult(false);
+    if (wasClean) {
+      score++;
+      document.getElementById('scoreDisplay').textContent = score;
+      const dot = document.createElement('div');
+      dot.className = 'streak-dot';
+      document.getElementById('streakDots').appendChild(dot);
+    }
 
     chordRoundsOnRoot++;
     let rootChanged = false;
@@ -2272,6 +2575,7 @@ function onSuccess() {
       rootChanged = true;
     }
     chooseNextChord(); // picks chord + places root in right octave around middle C
+    beginAssignmentAttempt(); // new chord = new attempt
     updateDisplay();
 
     const beginRound = () => {
@@ -2301,12 +2605,15 @@ function onSuccess() {
   }
 
   if (gameMode === 'progression') {
-    // Full progression completed!
+    // Full progression completed! (Per-chord commits happen inline where
+    // progChordIndex is advanced; onSuccess just handles the progression
+    // transition.)
+    // Per-chord cleanliness is tracked in the assignment records — the
+    // session score just counts completed progressions.
     cancelAnimationFrame(animFrame);
+    document.getElementById('streakDots').innerHTML = '';
     score++;
     document.getElementById('scoreDisplay').textContent = score;
-    document.getElementById('streakDots').innerHTML = '';
-
     const dot = document.createElement('div');
     dot.className = 'streak-dot';
     document.getElementById('streakDots').appendChild(dot);
@@ -2318,6 +2625,7 @@ function onSuccess() {
     const progIndices = [...selectedProgressions];
     currentProgression = PROGRESSIONS[progIndices[Math.floor(Math.random() * progIndices.length)]];
     setupProgChord();
+    beginAssignmentAttempt(); // first chord of fresh progression
     buildPiano();
 
     document.getElementById('intervalDisplay').textContent = `✓ Progression ${score}!`;
@@ -2344,16 +2652,22 @@ function onSuccess() {
     // Lick mode: advance to next note in lick
     lickNoteIndex++;
 
-    const dot = document.createElement('div');
-    dot.className = 'streak-dot';
-    document.getElementById('streakDots').appendChild(dot);
+    if (wasClean) {
+      const dot = document.createElement('div');
+      dot.className = 'streak-dot';
+      document.getElementById('streakDots').appendChild(dot);
+    }
 
     if (lickNoteIndex >= lickNotes.length) {
-      // Lick complete in this key!
+      // Lick complete in this key! Commit the CURRENT lick assignment
+      // before we (potentially) swap to a new one.
+      commitAssignmentResult(false);
       cancelAnimationFrame(animFrame);
-      score++;
       lickKeysPlayed++;
-      document.getElementById('scoreDisplay').textContent = score;
+      if (wasClean) {
+        score++;
+        document.getElementById('scoreDisplay').textContent = score;
+      }
       document.getElementById('streakDots').innerHTML = '';
 
       // Move to next key
@@ -2374,6 +2688,7 @@ function onSuccess() {
       lickRoot = pickLickRoot(lickKeyOrder[lickKeyIndex]);
       lickNotes = buildLickNotes(currentLick, lickRoot);
       lickNoteIndex = 0;
+      beginAssignmentAttempt(); // fresh attempt for the next lick run
 
       document.getElementById('intervalDisplay').textContent = `✓ Lick ${score}!`;
 
@@ -2404,16 +2719,20 @@ function onSuccess() {
     // Scale mode: advance to next note in scale
     scaleNoteIndex++;
 
-    // Streak dot
-    const dot = document.createElement('div');
-    dot.className = 'streak-dot';
-    document.getElementById('streakDots').appendChild(dot);
+    if (wasClean) {
+      const dot = document.createElement('div');
+      dot.className = 'streak-dot';
+      document.getElementById('streakDots').appendChild(dot);
+    }
 
     if (scaleNoteIndex >= scaleNotes.length) {
-      // Scale complete!
+      // Scale complete! Commit the finished scale run before we pick a new one.
+      commitAssignmentResult(false);
       cancelAnimationFrame(animFrame);
-      score++;
-      document.getElementById('scoreDisplay').textContent = score;
+      if (wasClean) {
+        score++;
+        document.getElementById('scoreDisplay').textContent = score;
+      }
       document.getElementById('streakDots').innerHTML = '';
 
       // Pick next scale + root
@@ -2423,6 +2742,7 @@ function onSuccess() {
       scaleRoot = Math.floor(Math.random() * (getRangeHigh() - getRangeLow() + 1)) + getRangeLow();
       scaleNotes = buildScaleNotes(scaleRoot, scale);
       scaleNoteIndex = 0;
+      beginAssignmentAttempt(); // fresh attempt for the new scale run
 
       document.getElementById('intervalDisplay').textContent = `✓ Scale ${score}!`;
 
@@ -2454,23 +2774,26 @@ function onSuccess() {
     // Melody/Harmonic mode: advance to next note in sequence
     melodyIndex++;
 
-    // Streak dot for each note
-    const dot = document.createElement('div');
-    dot.className = 'streak-dot';
-    document.getElementById('streakDots').appendChild(dot);
+    if (wasClean) {
+      const dot = document.createElement('div');
+      dot.className = 'streak-dot';
+      document.getElementById('streakDots').appendChild(dot);
+    }
 
     if (melodyIndex >= melodyNotes.length) {
-      // Round complete!
-      melodyRound++;
+      // Round complete! Commit the finished melody before we generate the next.
+      commitAssignmentResult(false);
       melodyIndex = 0;
 
-      // Add a note based on speed setting (chill=4, normal=3, fast=2, insane=1)
-      if (melodyRound > 0 && melodyRound % melodySpeed === 0) {
-        melodyLength++;
+      if (wasClean) {
+        melodyRound++;
+        // Add a note based on speed setting (chill=4, normal=3, fast=2, insane=1)
+        if (melodyRound > 0 && melodyRound % melodySpeed === 0) {
+          melodyLength++;
+        }
+        score = melodyRound;
+        document.getElementById('scoreDisplay').textContent = score;
       }
-
-      score = melodyRound;
-      document.getElementById('scoreDisplay').textContent = score;
 
       // Generate new melody
       if (gameMode === 'harmonic') {
@@ -2482,6 +2805,7 @@ function onSuccess() {
       } else {
         melodyNotes = generateMelody(melodyLength);
       }
+      beginAssignmentAttempt(); // fresh attempt for the next melody
 
       const scaleLabel = gameMode === 'harmonic' ? ` | ${SCALES[selectedScale].name}` : '';
       document.getElementById('intervalDisplay').textContent = `✓ Round ${melodyRound}! Length: ${melodyLength}${scaleLabel}`;
@@ -2530,12 +2854,15 @@ function onSuccess() {
     return;
   }
 
-  score++;
+  // Commit the just-completed interval assignment before we pick a new one.
+  commitAssignmentResult(false);
 
-  // Streak dot
-  const dot = document.createElement('div');
-  dot.className = 'streak-dot';
-  document.getElementById('streakDots').appendChild(dot);
+  if (wasClean) {
+    score++;
+    const dot = document.createElement('div');
+    dot.className = 'streak-dot';
+    document.getElementById('streakDots').appendChild(dot);
+  }
 
   // In instrument mode, briefly flash the correct interval before moving on
   if (gameMode === 'instrument') {
@@ -2562,6 +2889,7 @@ function onSuccess() {
   }
 
   chooseNextChallenge();
+  beginAssignmentAttempt(); // fresh attempt for the next interval
 
   // Short delay so player can see the revealed interval in instrument mode
   setTimeout(() => {
@@ -2579,6 +2907,13 @@ function onSuccess() {
 }
 
 function endGame() {
+  // If the player was mid-attempt, record the timeout as a mistake on the
+  // current assignment. This only fires once because commitAssignmentResult
+  // uses currentAssignmentInfo() which returns null if state is cleared.
+  if (gameActive) {
+    commitAssignmentResult(true);
+  }
+
   gameActive = false;
   melodyPlaying = false;
   if (animFrame) cancelAnimationFrame(animFrame);
@@ -2728,6 +3063,8 @@ function openSettings() {
   document.getElementById('setup').classList.remove('active');
   document.getElementById('settings').classList.add('active');
   document.getElementById('settingsGear').style.display = 'none';
+  const pb = document.getElementById('progressBtn');
+  if (pb) pb.style.display = 'none';
   loadSettingsUI();
 }
 
@@ -2735,6 +3072,103 @@ function closeSettings() {
   document.getElementById('settings').classList.remove('active');
   document.getElementById('setup').classList.add('active');
   document.getElementById('settingsGear').style.display = '';
+  const pb = document.getElementById('progressBtn');
+  if (pb) pb.style.display = '';
+}
+
+// ── PROGRESS VIEWER ──
+let _progressFilter = 'all';
+
+function openProgress() {
+  document.getElementById('setup').classList.remove('active');
+  document.getElementById('progress').classList.add('active');
+  document.getElementById('settingsGear').style.display = 'none';
+  document.getElementById('progressBtn').style.display = 'none';
+  renderProgressViewer();
+}
+
+function closeProgress() {
+  document.getElementById('progress').classList.remove('active');
+  document.getElementById('setup').classList.add('active');
+  document.getElementById('settingsGear').style.display = '';
+  document.getElementById('progressBtn').style.display = '';
+}
+
+function setProgressFilter(name) {
+  _progressFilter = name;
+  document.querySelectorAll('[data-pfilter]').forEach(b => {
+    b.classList.toggle('selected', b.dataset.pfilter === name);
+  });
+  renderProgressViewer();
+}
+
+function resetProgressConfirm() {
+  if (confirm('Reset ALL overlearning progress? This cannot be undone.')) {
+    progressResetAll();
+    renderProgressViewer();
+  }
+}
+
+function renderProgressViewer() {
+  // Summary
+  const sum = progressSummary();
+  const summaryEl = document.getElementById('progressSummary');
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <span class="stat"><strong>${sum.total}</strong> tracked</span>
+      <span class="stat mastered"><strong>${sum.mastered}</strong> mastered</span>
+      <span class="stat"><strong>${sum.totalSuccesses}</strong> reps</span>
+      <span class="stat mistakes"><strong>${sum.totalMistakes}</strong> mistakes</span>
+    `;
+  }
+
+  // List
+  const listEl = document.getElementById('progressList');
+  if (!listEl) return;
+  const all = progressAll();
+  let rows = Object.values(all);
+
+  // Filter
+  if (_progressFilter === 'weakest') {
+    rows = rows.filter(r => !r.mastered);
+    rows.sort((a, b) => b.mistakes - a.mistakes || b.lastSeen - a.lastSeen);
+  } else if (_progressFilter === 'mastered') {
+    rows = rows.filter(r => r.mastered);
+    rows.sort((a, b) => (b.masteredAt || 0) - (a.masteredAt || 0));
+  } else if (_progressFilter !== 'all') {
+    // Mode filters
+    rows = rows.filter(r => {
+      if (_progressFilter === 'voice') return r.mode === 'voice' || r.mode === 'instrument';
+      return r.mode === _progressFilter;
+    });
+    rows.sort((a, b) => b.lastSeen - a.lastSeen);
+  } else {
+    rows.sort((a, b) => b.lastSeen - a.lastSeen);
+  }
+
+  if (rows.length === 0) {
+    listEl.innerHTML = '<div class="progress-empty">No progress recorded yet. Play a round!</div>';
+    return;
+  }
+
+  listEl.innerHTML = rows.map(r => {
+    const required = progressRequiredStreak(r);
+    const pct = required > 0 ? Math.min(100, Math.round((r.currentStreak / required) * 100)) : 0;
+    const rowClass = 'progress-row' + (r.mastered ? ' mastered' : '');
+    const label = r.label || r.key;
+    const modeLabel = (r.mode || '').replace('licks', 'lick');
+    const star = r.mastered ? ' ★' : '';
+    const mistakesCell = r.mistakes > 0 ? `<span class="pmistakes">${r.mistakes}✗</span>` : '<span class="pmistakes"></span>';
+    return `
+      <div class="${rowClass}">
+        <div class="plabel">${label}${star}</div>
+        <div class="pmode">${modeLabel}</div>
+        <div class="pstreak">${r.currentStreak}/${required}</div>
+        ${mistakesCell}
+        <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+      </div>
+    `;
+  }).join('');
 }
 
 function loadSettingsUI() {
@@ -2749,6 +3183,7 @@ function loadSettingsUI() {
   document.getElementById('sBassHigh').value = s.bassHigh;
   document.getElementById('sCents').value = s.cents;
   document.getElementById('sHold').value = s.holdMs;
+  document.getElementById('sMistakeHold').value = s.mistakeHoldMs != null ? s.mistakeHoldMs : DEFAULTS.mistakeHoldMs;
   document.getElementById('sSensitivity').value = s.sensitivity;
   document.getElementById('sConfidence').value = s.confidence;
   document.getElementById('sAnnounceVoice').checked = s.announceVoice !== false;
@@ -2769,6 +3204,7 @@ function updateSettingDisplay() {
   document.getElementById('sBassHighVal').textContent = midiToName(+document.getElementById('sBassHigh').value);
   document.getElementById('sCentsVal').textContent = document.getElementById('sCents').value;
   document.getElementById('sHoldVal').textContent = document.getElementById('sHold').value;
+  document.getElementById('sMistakeHoldVal').textContent = document.getElementById('sMistakeHold').value;
   const sens = +document.getElementById('sSensitivity').value;
   document.getElementById('sSensitivityVal').textContent = sens;
   const conf = +document.getElementById('sConfidence').value;
@@ -2794,6 +3230,7 @@ function applySettings(s) {
 
   CENTS_TOLERANCE = s.cents;
   HOLD_REQUIRED = s.holdMs;
+  MISTAKE_HOLD_REQUIRED = s.mistakeHoldMs != null ? s.mistakeHoldMs : DEFAULTS.mistakeHoldMs;
   RMS_THRESHOLD = s.sensitivity / 1000; // 1-20 → 0.001-0.020
   CONFIDENCE_THRESHOLD = s.confidence / 100; // 5-50 → 0.05-0.50
   ANNOUNCE_VOICE = s.announceVoice !== false;
@@ -2822,6 +3259,7 @@ function saveSettings() {
     bassHigh: +document.getElementById('sBassHigh').value,
     cents: +document.getElementById('sCents').value,
     holdMs: +document.getElementById('sHold').value,
+    mistakeHoldMs: +document.getElementById('sMistakeHold').value,
     sensitivity: +document.getElementById('sSensitivity').value,
     confidence: +document.getElementById('sConfidence').value,
     announceVoice: document.getElementById('sAnnounceVoice').checked,

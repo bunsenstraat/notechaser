@@ -94,6 +94,123 @@ body::before {
 }
 .settings-gear:hover { color: var(--cyan); border-color: var(--cyan-dim); }
 
+.progress-btn {
+  position: absolute;
+  right: 60px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 6px 10px;
+  transition: all 0.2s;
+}
+.progress-btn:hover { color: var(--magenta); border-color: var(--magenta-dim); }
+
+/* Progress screen */
+.progress-summary {
+  font-family: 'Chakra Petch', sans-serif;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  text-align: center;
+  margin-bottom: 14px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.progress-summary .stat {
+  display: inline-block;
+  margin: 0 10px;
+}
+.progress-summary .stat strong {
+  color: var(--cyan);
+  font-size: 1.1rem;
+}
+.progress-summary .stat.mastered strong { color: var(--green); }
+.progress-summary .stat.mistakes strong { color: var(--red); }
+
+.progress-filter-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.progress-filter-btn {
+  font-size: 0.72rem;
+  padding: 6px 10px;
+}
+.progress-filter-btn.selected {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: var(--surface2);
+}
+
+.progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.progress-empty {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 40px 0;
+  font-size: 0.9rem;
+}
+.progress-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.82rem;
+}
+.progress-row.mastered { border-color: var(--green-dim); }
+.progress-row.tainted  { border-color: var(--red-dim); }
+.progress-row .plabel { color: var(--text); }
+.progress-row .pmode {
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.progress-row .pstreak {
+  color: var(--cyan);
+  font-variant-numeric: tabular-nums;
+  min-width: 60px;
+  text-align: right;
+}
+.progress-row.mastered .pstreak { color: var(--green); }
+.progress-row .pmistakes {
+  color: var(--red);
+  font-variant-numeric: tabular-nums;
+  min-width: 42px;
+  text-align: right;
+}
+.progress-bar-wrap {
+  grid-column: 1 / -1;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan) 0%, var(--magenta) 100%);
+  transition: width 0.3s;
+}
+.progress-row.mastered .progress-bar-fill {
+  background: var(--green);
+}
+
 /* Settings screen */
 .settings-screen {
   display: none;
@@ -781,6 +898,25 @@ body::before {
   flex-shrink: 0;
 }
 
+.mastery-display {
+  text-align: center;
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  padding: 2px 0 4px;
+}
+
+.mastery-display.tainted {
+  color: var(--red);
+}
+
+.mastery-display.mastered {
+  color: var(--green);
+  text-shadow: 0 0 8px var(--green-dim);
+}
+
 .streak-dot {
   width: 10px;
   height: 10px;
@@ -933,6 +1069,29 @@ body::before {
   font-family: 'Chakra Petch', sans-serif;
   font-size: 0.65rem;
   color: var(--cyan);
+}
+
+.skip-hint {
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 4px 10px;
+  margin: 2px auto 0;
+  opacity: 0.65;
+  cursor: pointer;
+  user-select: none;
+}
+.skip-hint:hover { opacity: 1; color: var(--red); }
+.skip-hint kbd {
+  display: inline-block;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 5px;
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.62rem;
+  color: var(--red);
 }
 
 /* Responsive */
