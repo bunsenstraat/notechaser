@@ -31,6 +31,7 @@
       <button class="mode-btn" data-mode="scale" onclick="setMode('scale')">&#127925; Scales</button>
       <button class="mode-btn" data-mode="licks" onclick="setMode('licks')">&#127927; Licks</button>
       <button class="mode-btn" data-mode="progression" onclick="setMode('progression')">&#127929; Progressions</button>
+      <button class="mode-btn" data-mode="target" onclick="setMode('target')">&#127919; Target Notes</button>
     </div>
 
     <!-- Interval-based setup (voice/instrument/melody) -->
@@ -195,6 +196,25 @@
       </div>
     </div>
 
+    <!-- Target Notes mode: chained chord-tone voice leading -->
+    <div id="targetSetup" style="display:none">
+      <div class="section-label">Chord Quality</div>
+      <div class="direction-row">
+        <button class="dir-btn selected target-qual-btn" data-tqual="major" onclick="setTargetQuality('major')">Major</button>
+      </div>
+      <div class="section-label" style="margin-top:12px">Cards per Round</div>
+      <div class="direction-row">
+        <button class="dir-btn target-count-btn" data-tcount="3" onclick="setTargetCount(3)">3</button>
+        <button class="dir-btn selected target-count-btn" data-tcount="6" onclick="setTargetCount(6)">6</button>
+        <button class="dir-btn target-count-btn" data-tcount="12" onclick="setTargetCount(12)">12</button>
+      </div>
+      <div class="section-label" style="margin-top:12px">Patterns</div>
+      <div class="preset-row">
+        <button class="preset-btn target-pattern-btn selected" data-tpatset="all" onclick="setTargetPatternSet('all')">All 6</button>
+        <button class="preset-btn target-pattern-btn" data-tpatset="ascdesc" onclick="setTargetPatternSet('ascdesc')">1-3-5 / 5-3-1 only</button>
+      </div>
+    </div>
+
     <div class="section-label">TIME PER NOTE</div>
     <div class="time-slider-wrap">
       <input type="range" id="timeSlider" class="time-slider" min="3" max="60" value="60" step="1" oninput="updateTimeLabel()">
@@ -346,6 +366,7 @@
       <button class="preset-btn progress-filter-btn" data-pfilter="scale" onclick="setProgressFilter('scale')">Scales</button>
       <button class="preset-btn progress-filter-btn" data-pfilter="licks" onclick="setProgressFilter('licks')">Licks</button>
       <button class="preset-btn progress-filter-btn" data-pfilter="bass" onclick="setProgressFilter('bass')">Bass</button>
+      <button class="preset-btn progress-filter-btn" data-pfilter="target" onclick="setProgressFilter('target')">Target</button>
       <button class="preset-btn progress-filter-btn" data-pfilter="weakest" onclick="setProgressFilter('weakest')">Weakest</button>
       <button class="preset-btn progress-filter-btn" data-pfilter="mastered" onclick="setProgressFilter('mastered')">Mastered</button>
     </div>

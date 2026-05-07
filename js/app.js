@@ -220,6 +220,10 @@ function onMidiNoteChange() {
       } else {
         markAssignmentMistake();
       }
+    } else if (gameMode === 'target') {
+      const t = targetSequence[targetSeqIndex];
+      if (t && latestNote === t.midi) onSuccess();
+      else markAssignmentMistake();
     } else if (gameMode === 'instrument') {
       if (latestNote === currentTargetMidi) {
         onSuccess();
@@ -342,6 +346,23 @@ let scaleDirUp = true, scaleDirDown = true, scaleDirBoth = false;
 let scaleCurrentDir = 'up'; // tracks actual direction for voice announcement
 let scaleRangeWide = false; // false = vocal range, true = instrument/keyboard range
 let hiScoreScale = parseInt(localStorage.getItem('notechaser_hi_scale') || '0');
+
+// Target Notes mode state
+// Training: a sequence of "cards", each a major (for now) triad sung as a
+// permutation of 1-3-5. The LAST note of card N is the same MIDI note as the
+// FIRST note of card N+1 — the new card's chosen pattern decides what degree
+// the shared note plays (1, 3 or 5), which in turn picks the new root.
+const TARGET_PERMUTATIONS = [
+  ['1','3','5'], ['1','5','3'], ['3','1','5'],
+  ['3','5','1'], ['5','1','3'], ['5','3','1'],
+];
+const TARGET_DEGREE_SEMITONES = { '1': 0, '3': 4, '5': 7 };
+let targetQuality = 'major';      // currently only 'major' supported
+let targetCountPerRound = 6;      // cards per round
+let targetPatternSet = 'all';     // 'all' or 'ascdesc'
+let targetSequence = [];          // flat list of {midi, degree, cardIdx, posInCard, cardRoot, cardPattern}
+let targetSeqIndex = 0;           // current position in flat sequence
+let hiScoreTarget = parseInt(localStorage.getItem('notechaser_hi_target') || '0');
 
 let currentKeyDisplay = ''; // jazz-friendly key name for current round
 
@@ -727,14 +748,16 @@ function setMode(m) {
   const isScale = (m === 'scale');
   const isLicks = (m === 'licks');
   const isProgression = (m === 'progression');
+  const isTarget = (m === 'target');
   const isMelody = (m === 'melody' || m === 'harmonic');
-  document.getElementById('intervalSetup').style.display = (isHarmonic || isChord || isBass || isScale || isLicks || isProgression) ? 'none' : '';
+  document.getElementById('intervalSetup').style.display = (isHarmonic || isChord || isBass || isScale || isLicks || isProgression || isTarget) ? 'none' : '';
   document.getElementById('scaleSetup').style.display = isHarmonic ? '' : 'none';
   document.getElementById('chordSetup').style.display = isChord ? '' : 'none';
   document.getElementById('bassSetup').style.display = isBass ? '' : 'none';
   document.getElementById('scaleSingSetup').style.display = isScale ? '' : 'none';
   document.getElementById('licksSetup').style.display = isLicks ? '' : 'none';
   document.getElementById('progressionSetup').style.display = isProgression ? '' : 'none';
+  document.getElementById('targetSetup').style.display = isTarget ? '' : 'none';
   document.querySelectorAll('.melody-only-setting').forEach(el => {
     el.style.display = isMelody ? '' : 'none';
   });
@@ -821,9 +844,96 @@ function updateStartBtn() {
     document.getElementById('startBtn').disabled = selectedLicks.size === 0;
   } else if (gameMode === 'progression') {
     document.getElementById('startBtn').disabled = selectedProgressions.size === 0;
+  } else if (gameMode === 'target') {
+    document.getElementById('startBtn').disabled = false; // always enabled (defaults are set)
   } else {
     document.getElementById('startBtn').disabled = selectedIntervals.size === 0;
   }
+}
+
+// ── TARGET NOTES helpers ──
+function setTargetQuality(q) {
+  targetQuality = q;
+  document.querySelectorAll('.target-qual-btn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.tqual === q);
+  });
+}
+function setTargetCount(n) {
+  targetCountPerRound = n;
+  document.querySelectorAll('.target-count-btn').forEach(b => {
+    b.classList.toggle('selected', parseInt(b.dataset.tcount) === n);
+  });
+}
+function setTargetPatternSet(p) {
+  targetPatternSet = p;
+  document.querySelectorAll('.target-pattern-btn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.tpatset === p);
+  });
+}
+
+// Build a voice-led sequence of `numCards` chord-tone cards. Each card is a
+// permutation of {1, 3, 5} sung in order. The last note of card N is the
+// SAME MIDI NOTE as the first note of card N+1 — the next card's chosen
+// pattern then decides what degree role that shared note plays, which in
+// turn picks the new root. If the resulting notes drift outside the vocal
+// range, we octave-shift the whole card (breaks voice leading at that
+// seam, but that's rare and lets the exercise continue).
+function generateTargetSequence(numCards) {
+  const patternPool = (targetPatternSet === 'ascdesc')
+    ? [['1','3','5'], ['5','3','1']]
+    : TARGET_PERMUTATIONS;
+
+  const lo = getRangeAbsLow();
+  const hi = getRangeAbsHigh();
+
+  const sequence = [];
+  // Start low so the first card has headroom to climb
+  let root = lo + 2; // slightly off the floor
+  // Ensure the first card's full 1-3-5 fits
+  while (root + 7 > hi && root > lo) root -= 12;
+  if (root + 7 > hi) root = lo;
+  if (root < lo) root = lo;
+
+  let pattern = patternPool[Math.floor(Math.random() * patternPool.length)];
+
+  for (let c = 0; c < numCards; c++) {
+    // Compute notes for this card
+    let notes = pattern.map(d => root + TARGET_DEGREE_SEMITONES[d]);
+    // If any note is out of range, octave-shift the whole card toward center
+    while (Math.max(...notes) > hi) { root -= 12; notes = notes.map(n => n - 12); }
+    while (Math.min(...notes) < lo) { root += 12; notes = notes.map(n => n + 12); }
+
+    notes.forEach((midi, pos) => {
+      sequence.push({
+        midi,
+        degree: pattern[pos],
+        cardIdx: c,
+        posInCard: pos,
+        cardRoot: root,
+        cardPattern: pattern.join('-'),
+      });
+    });
+
+    if (c === numCards - 1) break;
+
+    // Choose the next pattern — try to avoid immediate repeat
+    let nextPattern = patternPool[Math.floor(Math.random() * patternPool.length)];
+    if (patternPool.length > 1) {
+      for (let k = 0; k < 4 && nextPattern === pattern; k++) {
+        nextPattern = patternPool[Math.floor(Math.random() * patternPool.length)];
+      }
+    }
+
+    // Shared note = last note of previous card. Next card's first degree
+    // determines the new root: if pattern[0]='1', root = shared; if '3',
+    // root = shared - 4 (shared is major 3rd of new chord); if '5',
+    // root = shared - 7 (shared is perfect 5th of new chord).
+    const lastMidi = notes[notes.length - 1];
+    const newFirstDegree = nextPattern[0];
+    root = lastMidi - TARGET_DEGREE_SEMITONES[newFirstDegree];
+    pattern = nextPattern;
+  }
+  return sequence;
 }
 
 // Default: easy
@@ -939,6 +1049,13 @@ function replayBaseNote() {
       updateDisplay();
       roundStart = performance.now();
     });
+  } else if (gameMode === 'target') {
+    // Replay the current target note (single reference pitch)
+    const t = targetSequence[targetSeqIndex];
+    if (t) {
+      playNote(t.midi, 0.8);
+      setTimeout(() => { roundStart = performance.now(); }, 900);
+    }
   } else {
     playNote(currentBaseMidi, 0.6);
     if (gameMode === 'instrument') {
@@ -1742,6 +1859,20 @@ function updateDisplay() {
     document.getElementById('arrowDir').innerHTML = '&#127927;';
     document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay lick';
     updatePianoHighlights(null, lickNotes[lickNoteIndex], null);
+  } else if (gameMode === 'target') {
+    document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreTarget}`;
+    const t = targetSequence[targetSeqIndex];
+    if (t) {
+      const rootPc = ((t.cardRoot % 12) + 12) % 12;
+      const rootName = jazzNoteName(rootPc);
+      const totalCards = targetCountPerRound;
+      document.getElementById('intervalDisplay').textContent = `Target Notes · Card ${t.cardIdx + 1}/${totalCards}`;
+      document.getElementById('noteFrom').textContent = `${rootName} ${targetQuality} · ${t.cardPattern}`;
+      document.getElementById('noteTarget').textContent = `${t.degree} → ${midiToName(t.midi)}`;
+    }
+    document.getElementById('arrowDir').innerHTML = '&#127919;';
+    document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay current note';
+    updatePianoHighlights(null, t ? t.midi : null, null);
   } else if (gameMode === 'progression') {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreProgression}`;
     const chordDef = currentProgression.chords[progChordIndex];
@@ -2004,6 +2135,33 @@ async function startGame() {
         }
       });
     }, 400);
+  } else if (gameMode === 'target') {
+    score = 0;
+    targetSeqIndex = 0;
+    targetSequence = generateTargetSequence(targetCountPerRound);
+    buildPiano();
+    updateDisplay();
+
+    setTimeout(() => {
+      const beginGame = () => {
+        gameActive = true;
+        roundStart = performance.now();
+        gameLoop();
+      };
+      // Intro: speak first chord root + quality, then play the first note as a pitch reference
+      const first = targetSequence[0];
+      const rootPc = ((first.cardRoot % 12) + 12) % 12;
+      const rootName = jazzNoteName(rootPc);
+      currentKeyDisplay = rootName;
+      speak(`${speechify(rootName)} ${targetQuality}`, () => {
+        if (AUTO_PLAY_INTRO) {
+          playNote(first.midi, 0.8);
+          setTimeout(beginGame, 1000);
+        } else {
+          beginGame();
+        }
+      });
+    }, 400);
   } else if (gameMode === 'melody' || gameMode === 'harmonic') {
     melodyLength = 2;
     melodyRound = 0;
@@ -2206,7 +2364,11 @@ function gameLoop() {
       }
     } else {
       // All other modes: single target
-      const targetMidi = gameMode === 'licks' ? lickNotes[lickNoteIndex] : gameMode === 'scale' ? scaleNotes[scaleNoteIndex] : (gameMode === 'melody' || gameMode === 'harmonic') ? melodyNotes[melodyIndex] : currentTargetMidi;
+      const targetMidi = gameMode === 'licks' ? lickNotes[lickNoteIndex]
+        : gameMode === 'scale' ? scaleNotes[scaleNoteIndex]
+        : (gameMode === 'melody' || gameMode === 'harmonic') ? melodyNotes[melodyIndex]
+        : gameMode === 'target' ? (targetSequence[targetSeqIndex] ? targetSequence[targetSeqIndex].midi : 0)
+        : currentTargetMidi;
       // In voice mode with root-style intervals, match pitch class (any octave).
       // This lets singers nail a b13 or 13 by singing the correct pitch class at a reachable octave.
       let centsOff;
@@ -2233,7 +2395,7 @@ function gameLoop() {
       singingEl.innerHTML = `You: <span>${noteName}</span>`;
       if (gameMode === 'instrument') {
         updatePianoHighlights(null, null, roundedMidi);
-      } else if (gameMode === 'licks' || gameMode === 'scale' || gameMode === 'melody' || gameMode === 'harmonic') {
+      } else if (gameMode === 'licks' || gameMode === 'scale' || gameMode === 'melody' || gameMode === 'harmonic' || gameMode === 'target') {
         updatePianoHighlights(null, targetMidi, roundedMidi);
       } else {
         updatePianoHighlights(currentBaseMidi, currentTargetMidi, roundedMidi);
@@ -2276,6 +2438,9 @@ function gameLoop() {
     } else if (gameMode === 'melody' || gameMode === 'harmonic') {
       const targetMidi = melodyNotes[melodyIndex];
       updatePianoHighlights(null, targetMidi, null);
+    } else if (gameMode === 'target') {
+      const t = targetSequence[targetSeqIndex];
+      updatePianoHighlights(null, t ? t.midi : null, null);
     } else if (gameMode === 'instrument') {
       updatePianoHighlights(null, null, null);
     } else {
@@ -2373,6 +2538,16 @@ function skipCurrentAssignment() {
     }
     return;
   }
+  if (gameMode === 'target' && targetSequence.length > 0) {
+    // Skip just this card — jump to the last note of the current card so
+    // onSuccess fires the card-crossed path (commits mistake, advances).
+    const curCard = targetSequence[targetSeqIndex] ? targetSequence[targetSeqIndex].cardIdx : 0;
+    while (targetSeqIndex + 1 < targetSequence.length && targetSequence[targetSeqIndex + 1].cardIdx === curCard) {
+      targetSeqIndex++;
+    }
+    onSuccess();
+    return;
+  }
 
   // Multi-note single-assignment (scale/lick/melody): jump to final note so
   // the existing "all notes completed" branch of onSuccess handles advance.
@@ -2437,6 +2612,17 @@ function currentAssignmentInfo() {
     }
     if (gameMode === 'melody') {
       return { key: `melody:len${melodyLength}`, label: `Melody length ${melodyLength}`, mode: 'melody' };
+    }
+    if (gameMode === 'target') {
+      // Key by pattern shape — this is what the learner is practicing. The
+      // specific root is a variable, not the thing being tested.
+      const t = targetSequence[targetSeqIndex] || targetSequence[targetSequence.length - 1];
+      if (!t) return null;
+      return {
+        key: `target:${targetQuality}:${t.cardPattern}`,
+        label: `${targetQuality} ${t.cardPattern}`,
+        mode: 'target',
+      };
     }
     if (gameMode === 'harmonic') {
       const scale = SCALES[selectedScale];
@@ -2770,6 +2956,85 @@ function onSuccess() {
     return;
   }
 
+  if (gameMode === 'target') {
+    // Target Notes: advance through the flat sequence. Commit per-card when
+    // we cross a card boundary (each card = one assignment record). Whole
+    // round = full sequence = session score.
+    const prev = targetSequence[targetSeqIndex];
+    targetSeqIndex++;
+    const next = targetSequence[targetSeqIndex];
+    const crossedCard = !next || (prev && next.cardIdx !== prev.cardIdx);
+
+    if (wasClean) {
+      const dot = document.createElement('div');
+      dot.className = 'streak-dot';
+      document.getElementById('streakDots').appendChild(dot);
+    }
+
+    if (crossedCard) {
+      // We just finished a card — commit it
+      commitAssignmentResult(false);
+      beginAssignmentAttempt();
+    }
+
+    if (targetSeqIndex >= targetSequence.length) {
+      // Whole round complete
+      cancelAnimationFrame(animFrame);
+      if (wasClean) {
+        score++;
+        document.getElementById('scoreDisplay').textContent = score;
+      }
+      document.getElementById('streakDots').innerHTML = '';
+
+      // Generate fresh sequence
+      targetSequence = generateTargetSequence(targetCountPerRound);
+      targetSeqIndex = 0;
+      beginAssignmentAttempt();
+
+      const firstCard = targetSequence[0];
+      const rootPc = ((firstCard.cardRoot % 12) + 12) % 12;
+      currentKeyDisplay = jazzNoteName(rootPc);
+
+      document.getElementById('intervalDisplay').textContent = `✓ Round ${score}!`;
+      setTimeout(() => {
+        const beginRound = () => {
+          updateDisplay();
+          roundStart = performance.now();
+          animFrame = requestAnimationFrame(gameLoop);
+        };
+        speak(`${speechify(currentKeyDisplay)} ${targetQuality}`, () => {
+          if (AUTO_PLAY_INTRO) {
+            playNote(firstCard.midi, 0.8);
+            setTimeout(beginRound, 1000);
+          } else {
+            beginRound();
+          }
+        });
+      }, 800);
+    } else {
+      // Next note (possibly new card — announce the new root if so)
+      if (crossedCard) {
+        const nc = targetSequence[targetSeqIndex];
+        const newRootPc = ((nc.cardRoot % 12) + 12) % 12;
+        const newRootName = jazzNoteName(newRootPc);
+        if (newRootName !== currentKeyDisplay) {
+          currentKeyDisplay = newRootName;
+        }
+        // Short pause + play reference note (the shared pivot) before continuing
+        updateDisplay();
+        setTimeout(() => {
+          roundStart = performance.now();
+          animFrame = requestAnimationFrame(gameLoop);
+        }, 200);
+      } else {
+        updateDisplay();
+        roundStart = performance.now();
+        animFrame = requestAnimationFrame(gameLoop);
+      }
+    }
+    return;
+  }
+
   if (gameMode === 'melody' || gameMode === 'harmonic') {
     // Melody/Harmonic mode: advance to next note in sequence
     melodyIndex++;
@@ -3000,6 +3265,22 @@ function endGame() {
       bestEl.className = 'go-best go-new-best';
     } else {
       bestEl.textContent = `BEST: ${hiScoreProgression}`;
+      bestEl.className = 'go-best';
+    }
+  } else if (gameMode === 'target') {
+    const isNewBest = score > hiScoreTarget;
+    if (isNewBest) {
+      hiScoreTarget = score;
+      localStorage.setItem('notechaser_hi_target', hiScoreTarget);
+    }
+    document.getElementById('goScore').textContent = score;
+    document.getElementById('goScoreLabel').textContent = 'Target-Note Rounds';
+    const bestEl = document.getElementById('goBest');
+    if (isNewBest && score > 0) {
+      bestEl.textContent = 'NEW BEST!';
+      bestEl.className = 'go-best go-new-best';
+    } else {
+      bestEl.textContent = `BEST: ${hiScoreTarget}`;
       bestEl.className = 'go-best';
     }
   } else if (gameMode === 'melody' || gameMode === 'harmonic') {

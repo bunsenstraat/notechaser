@@ -106,7 +106,11 @@ function iv(str) {
 const CHORD_TYPES = [
   // Triads
   { name: 'Major',      short: 'Maj',   intervals: iv('1 3 5'),        cat: 'triad' },
+  { name: 'Major 1st', short: 'Maj/3', intervals: iv('3 5 8'),        cat: 'triad' },
+  { name: 'Major 2nd', short: 'Maj/5', intervals: iv('5 8 10'),       cat: 'triad' },
   { name: 'Minor',      short: 'min',   intervals: iv('1 b3 5'),       cat: 'triad' },
+  { name: 'Minor 1st', short: 'min/b3', intervals: iv('b3 5 8'),      cat: 'triad' },
+  { name: 'Minor 2nd', short: 'min/5',  intervals: iv('5 8 b10'),     cat: 'triad' },
   { name: 'Diminished', short: 'dim',   intervals: iv('1 b3 b5'),      cat: 'triad' },
   { name: 'Augmented',  short: 'aug',   intervals: iv('1 3 #5'),       cat: 'triad' },
   { name: 'Sus2',       short: 'sus2',  intervals: iv('1 2 5'),        cat: 'triad' },
@@ -176,9 +180,12 @@ const CHORD_TYPES = [
 
   { name: 'Guide 3/7 Dom 9',      short: '3/7 dom',    intervals: iv('3 b7 9'),        cat: 'guide' },
   { name: 'Guide 7/3 Dom 13',      short: '7/3 dom',    intervals: iv('b7 3 13'),        cat: 'guide' },
-  { name: 'Guide 3/7/9 Major',    short: '3/7',    intervals: iv('3 7 9'),            cat: 'guide' },
-  { name: 'Guide 3/7/9 Minor',    short: '3/7',    intervals: iv('b3 b7 9'),            cat: 'guide' },
-  { name: 'Guide 3/7/9 Minor Major',    short: '3/7',    intervals: iv('b3 b 9'),            cat: 'guide' },
+  { name: 'Guide 3/7/9 Major',    short: '3/7/9',    intervals: iv('3 7 9'),        cat: 'guide' },
+  { name: 'Guide 7/3/13 Major',    short: '7/3/13',    intervals: iv('7 3 13'),         cat: 'guide' },
+  { name: 'Guide 3/7/9 Minor',    short: '3/7/min',    intervals: iv('b3 b7 9'),      cat: 'guide' },
+  { name: 'Guide 7/3/5 Minor',    short: '7/3/min',    intervals: iv('b7 b3 5'),           cat: 'guide' },
+  { name: 'Guide 3/7/9 Minor Major',    short: '3/7/minmaj',    intervals: iv('b3 b 9'),            cat: 'guide' },
+  { name: 'Guide half dim',    short: 'halfdim',    intervals: iv('b3 b5 b7 1'),            cat: 'guide' },
   // { name: 'Quartal 3',    short: 'Q3',     intervals: iv('1 4 b7'),         cat: 'quartal' },
   // { name: 'Quartal 4',    short: 'Q4',     intervals: iv('1 4 b7 b10'),     cat: 'quartal' },
   // { name: 'Quartal 5',    short: 'Q5',     intervals: iv('1 4 b7 b10 b13'), cat: 'quartal' },
