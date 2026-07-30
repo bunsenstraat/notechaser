@@ -27,6 +27,7 @@ const DEFAULTS = {
   cents: 50, holdMs: 500, mistakeHoldMs: 700,
   sensitivity: 5, confidence: 20,
   announceVoice: true, autoPlayIntro: true, hidePiano: false, hideTarget: false,
+  playKeyboard: true,
 };
 
 // Toggleable behaviors (loaded from settings)
@@ -34,6 +35,7 @@ let ANNOUNCE_VOICE = true;
 let AUTO_PLAY_INTRO = true;
 let HIDE_PIANO = false;
 let HIDE_TARGET = false;
+let PLAY_KEYBOARD = true;
 
 // Mutable ranges (loaded from settings)
 let RANGE_LOW = 48;
@@ -78,7 +80,15 @@ let midiHeldNotes = new Set(); // currently held MIDI notes
 let midiInput = null;
 
 async function initMidi() {
+  // Without Web MIDI (iOS/Safari) or with access denied we can still play:
+  // the on-screen keyboard dock feeds the same note-on/off path.
+  const fallbackToOnScreen = () => {
+    if (!PLAY_KEYBOARD || typeof togglePlayKeyboard !== 'function') return false;
+    togglePlayKeyboard(true);
+    return true;
+  };
   if (!navigator.requestMIDIAccess) {
+    if (fallbackToOnScreen()) return true;
     alert('Web MIDI is not supported in this browser. Please use Chrome or Edge.');
     return false;
   }
@@ -88,6 +98,7 @@ async function initMidi() {
     midiAccess.onstatechange = () => connectMidiInputs();
     return true;
   } catch(e) {
+    if (fallbackToOnScreen()) return true;
     alert('MIDI access denied. Please allow MIDI access and try again.');
     return false;
   }
@@ -259,7 +270,7 @@ function setInputMode(midi) {
     b.classList.toggle('selected', (b.dataset.input === 'midi') === midi);
   });
   document.getElementById('micHint').textContent = midi
-    ? 'Connect a MIDI keyboard to play'
+    ? 'Connect a MIDI keyboard — or use the on-screen keyboard at the bottom'
     : 'Microphone access required for pitch detection';
 }
 
@@ -1711,6 +1722,8 @@ function showScreen(id) {
   const progressBtn = document.getElementById('progressBtn');
   if (progressBtn) progressBtn.style.display = id === 'setup' ? '' : 'none';
   document.getElementById(id).classList.add('active');
+  // The playable keyboard dock only rides along with the game screen
+  if (typeof pkOnScreenChange === 'function') pkOnScreenChange(id);
 }
 
 function chooseNextChallenge() {
@@ -2250,8 +2263,18 @@ function gameLoop() {
     return;
   }
 
+  // Echo the display piano's highlights onto the playable keyboard
+  if (typeof pkMirrorHighlights === 'function') pkMirrorHighlights();
+
   // Don't detect pitch while melody is playing back
   if (melodyPlaying) {
+    animFrame = requestAnimationFrame(gameLoop);
+    return;
+  }
+
+  // Same while the on-screen keyboard is sounding — otherwise the mic hears it
+  // and scores the keyboard instead of the singer.
+  if (typeof playKeyboardMuting === 'function' && playKeyboardMuting()) {
     animFrame = requestAnimationFrame(gameLoop);
     return;
   }
@@ -3471,6 +3494,7 @@ function loadSettingsUI() {
   document.getElementById('sAutoPlayIntro').checked = s.autoPlayIntro !== false;
   document.getElementById('sHidePiano').checked = s.hidePiano === true;
   document.getElementById('sHideTarget').checked = s.hideTarget === true;
+  document.getElementById('sPlayKeyboard').checked = s.playKeyboard !== false;
   updateSettingDisplay();
 }
 
@@ -3518,7 +3542,9 @@ function applySettings(s) {
   AUTO_PLAY_INTRO = s.autoPlayIntro !== false;
   HIDE_PIANO = s.hidePiano === true;
   HIDE_TARGET = s.hideTarget === true;
+  PLAY_KEYBOARD = s.playKeyboard !== false;
   applyHidePiano();
+  if (typeof pkApplyEnabled === 'function') pkApplyEnabled(PLAY_KEYBOARD);
   // Re-render current round if game is active so HIDE_TARGET takes effect immediately
   if (gameActive) updateDisplay();
 }
@@ -3547,6 +3573,7 @@ function saveSettings() {
     autoPlayIntro: document.getElementById('sAutoPlayIntro').checked,
     hidePiano: document.getElementById('sHidePiano').checked,
     hideTarget: document.getElementById('sHideTarget').checked,
+    playKeyboard: document.getElementById('sPlayKeyboard').checked,
   };
   localStorage.setItem('notechaser_settings', JSON.stringify(s));
   applySettings(s);

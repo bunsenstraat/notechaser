@@ -39,6 +39,7 @@ Hold the correct pitch (within ±50 cents) for half a second to lock it in. The 
 - ⏱️ **Adjustable time limit** with slider (3–20 seconds)
 - 🎯 **Visual pitch meter** — green = on target, yellow = close, red = way off
 - 🎵 **Piano visualization** highlighting base note, target, and what you're singing
+- 🎹 **Collapsible playable keyboard** at the bottom of the exercise screen — tap to hear notes (multi-touch, glissando), and in MIDI input mode it doubles as an on-screen MIDI keyboard
 - 🔁 **Replay base note** mid-game with R key
 - 📱 **Mobile friendly** — works on phone browsers with mic access
 - 🏆 **Streak counter** — compete with yourself
