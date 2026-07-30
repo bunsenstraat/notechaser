@@ -343,6 +343,10 @@
         <span class="setting-label">Hide piano keyboard</span>
         <input type="checkbox" id="sHidePiano">
       </div>
+      <div class="setting-row" title="Collapsible keyboard at the bottom of the exercise screen — tap it to hear notes, and use it as an on-screen MIDI keyboard in MIDI input mode.">
+        <span class="setting-label">Playable keyboard dock</span>
+        <input type="checkbox" id="sPlayKeyboard" checked>
+      </div>
       <div class="setting-row">
         <span class="setting-label">Hide target note (intervals)</span>
         <input type="checkbox" id="sHideTarget">
@@ -448,8 +452,30 @@
   </div>
 </div>
 
+<!-- PLAYABLE KEYBOARD DOCK -->
+<div class="pk-dock" id="pkDock">
+  <div class="pk-bar" id="pkBar">
+    <button class="pk-toggle" id="pkToggle" aria-expanded="false" onclick="togglePlayKeyboard()">
+      <span class="pk-toggle-icon">&#127929;</span>
+      <span class="pk-toggle-text">Keyboard</span>
+      <span class="pk-chevron" id="pkChevron">&#9650;</span>
+    </button>
+  </div>
+  <div class="pk-panel" id="pkPanel">
+    <div class="pk-controls">
+      <button class="pk-ctrl-btn" onclick="shiftPlayOctave(-1)" title="Octave down">&#9664;</button>
+      <div class="pk-range-label" id="pkRangeLabel">C3 &ndash; C5</div>
+      <button class="pk-ctrl-btn" onclick="shiftPlayOctave(1)" title="Octave up">&#9654;</button>
+      <button class="pk-ctrl-btn pk-oct-btn" id="pkOctavesBtn" onclick="cyclePlayOctaves()" title="Number of octaves shown">2 oct</button>
+      <button class="pk-ctrl-btn" onclick="pkAutoRange()" title="Centre on the current exercise range">&#127919;</button>
+    </div>
+    <div class="pk-keys" id="pkKeys"></div>
+  </div>
+</div>
+
 <script src="js/data.js"></script>
 <script src="js/progress.js"></script>
 <script src="js/app.js"></script>
+<script src="js/keyboard.js"></script>
 </body>
 </html>
