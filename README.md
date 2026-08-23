@@ -66,6 +66,8 @@ Hold the correct pitch (within ±50 cents) for half a second to lock it in. The 
 Single `index.html` file. No build step. No dependencies. No excuses.
 
 - **Web Audio API** for note synthesis and microphone input
+- Piano tone rendered once per octave into an `AudioBuffer` (additive partials with string inharmonicity + hammer transient), replayed with `playbackRate` — no samples to download
+- Melodies, licks and cadences are scheduled on the audio clock, not `setTimeout`, so rhythm survives a busy main thread
 - **Autocorrelation pitch detection** with parabolic interpolation
 - Adaptive FFT size for high sample rate devices (mobile)
 - Optimized for **male vocal range** (C3–E4)
