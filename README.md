@@ -41,6 +41,7 @@ Hold the correct pitch (within ±50 cents) for half a second to lock it in. The 
 - 🎵 **Piano visualization** highlighting base note, target, and what you're singing
 - 🎹 **Collapsible playable keyboard** at the bottom of the exercise screen — tap to hear notes (multi-touch, glissando), and in MIDI input mode it doubles as an on-screen MIDI keyboard
 - 🔁 **Replay base note** mid-game with R key
+- ⏸ **ENTER pauses/resumes listening** any time — and with "Wait for ENTER before listening" on, every assignment waits for you instead of auto-starting while you're still singing the last one
 - 📱 **Mobile friendly** — works on phone browsers with mic access
 - 🏆 **Streak counter** — compete with yourself
 

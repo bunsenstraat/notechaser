@@ -347,6 +347,10 @@
         <span class="setting-label">Playable keyboard dock</span>
         <input type="checkbox" id="sPlayKeyboard" checked>
       </div>
+      <div class="setting-row" title="Every assignment waits for you: press ENTER (or tap the prompt) to start listening. Stops a note you're still singing from answering the next assignment. ENTER also pauses/resumes listening at any time, in any mode.">
+        <span class="setting-label">Wait for ENTER before listening</span>
+        <input type="checkbox" id="sManualAdvance">
+      </div>
       <div class="setting-row" title="Replaces the note you're asked to sing with a ? in every mode, and stops the keyboard from lighting it up — find it by ear.">
         <span class="setting-label">Hide note to sing</span>
         <input type="checkbox" id="sHideTarget">
@@ -410,6 +414,7 @@
     <div class="replay-hint" id="replayHint">Press <kbd>SPACE</kbd> or tap here to replay base note</div>
     <div class="replay-hint answer-btn" id="answerBtn" style="display:none;" onclick="playAnswer()">🎹 Play Answer (hear the chord)</div>
     <div class="skip-hint" id="skipHint" title="Skip this assignment — it gets marked as a mistake for overlearning">Press <kbd>X</kbd> to skip (counts as mistake)</div>
+    <div class="continue-hint" id="continueHint" style="display:none" title="Start listening for this assignment, or pause listening mid-round"></div>
 
     <div class="piano-wrap">
       <div class="piano" id="piano"></div>

@@ -27,7 +27,7 @@ const DEFAULTS = {
   cents: 50, holdMs: 500, mistakeHoldMs: 700,
   sensitivity: 5, confidence: 20,
   announceVoice: true, autoPlayIntro: true, hidePiano: false, hideTarget: false,
-  playKeyboard: true,
+  playKeyboard: true, manualAdvance: false,
 };
 
 // Toggleable behaviors (loaded from settings)
@@ -36,6 +36,7 @@ let AUTO_PLAY_INTRO = true;
 let HIDE_PIANO = false;
 let HIDE_TARGET = false;
 let PLAY_KEYBOARD = true;
+let MANUAL_ADVANCE = false;
 
 // Mutable ranges (loaded from settings)
 let RANGE_LOW = 48;
@@ -126,6 +127,7 @@ function handleMidiMessage(msg) {
 
 function onMidiNoteChange() {
   if (!gameActive || melodyPlaying || !useMidi) return;
+  if (!listenGateOpen()) return; // waiting for the player to start the assignment
 
   if (gameMode === 'chord') {
     // Chord mode: check if held notes match all target notes
@@ -396,6 +398,76 @@ let TIMEOUT = 7000; // ms before game over
 let roundStart = 0;
 let animFrame = null;
 let pitchBuffer = new Float32Array(2048);
+
+// ── LISTEN GATE ──
+// While the gate is shut the mic is ignored and the round clock is frozen.
+// Two ways it shuts: MANUAL_ADVANCE closes it after every success (so the next
+// assignment can't be answered by the note you're still holding from the last
+// one), and ENTER pauses/resumes listening at any time.
+let awaitingContinue = false;
+let listenPaused = false;
+
+function listenGateOpen() { return !awaitingContinue && !listenPaused; }
+
+// Arming during playback is allowed — the round still can't start until the
+// playback finishes (gameLoop gates on melodyPlaying), but the keypress isn't
+// swallowed, so pressing ENTER over an announcement does what you'd expect.
+function armListening() {
+  if (!gameActive) return;
+  awaitingContinue = false;
+  listenPaused = false;
+  // Start the assignment clean — nothing carried over from the previous note
+  holdStart = 0;
+  holdingForMidi = null;
+  wrongHoldStart = 0;
+  wrongHoldingPC = null;
+  roundStart = performance.now();
+  updateContinueHint();
+}
+
+function pauseListening() {
+  if (!gameActive) return;
+  listenPaused = true;
+  holdStart = 0;
+  holdingForMidi = null;
+  updateContinueHint();
+}
+
+function toggleListening() {
+  if (!gameActive) return;
+  if (listenGateOpen()) pauseListening();
+  else armListening();
+}
+
+let _continueHintState = null;
+
+function updateContinueHint() {
+  const el = document.getElementById('continueHint');
+  if (!el) return;
+  // Cheap to call from the game loop: only touches the DOM when it changes
+  const state = !gameActive ? 'off'
+    : awaitingContinue ? 'waiting'
+    : listenPaused ? 'paused'
+    : MANUAL_ADVANCE ? 'live' : 'hidden';
+  if (state === _continueHintState) return;
+  _continueHintState = state;
+
+  if (!gameActive) { el.style.display = 'none'; return; }
+  if (awaitingContinue) {
+    el.className = 'continue-hint waiting';
+    el.innerHTML = '&#9654; Press <kbd>ENTER</kbd> or tap here when you\'re ready';
+  } else if (listenPaused) {
+    el.className = 'continue-hint paused';
+    el.innerHTML = '&#10073;&#10073; Paused — press <kbd>ENTER</kbd> or tap here to listen';
+  } else if (MANUAL_ADVANCE) {
+    el.className = 'continue-hint live';
+    el.innerHTML = '&#127908; Listening — <kbd>ENTER</kbd> to pause';
+  } else {
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = '';
+}
 
 // ── SETUP UI ──
 const grid = document.getElementById('intervalGrid');
@@ -1077,12 +1149,17 @@ document.addEventListener('keydown', (e) => {
     // Useful in mic modes when you know you blew it but the timer hasn't run out.
     e.preventDefault();
     skipCurrentAssignment();
+  } else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && gameActive) {
+    // Start the waiting assignment, or pause/resume listening mid-round
+    e.preventDefault();
+    toggleListening();
   }
 });
 document.getElementById('replayHint')?.addEventListener('click', replayBaseNote);
 document.getElementById('skipHint')?.addEventListener('click', () => {
   if (gameActive) skipCurrentAssignment();
 });
+document.getElementById('continueHint')?.addEventListener('click', toggleListening);
 
 function updatePianoHighlights(fromMidi, targetMidi, singingMidi) {
   // "Hide note to sing" also has to hide it on the keyboard — otherwise the
@@ -1678,6 +1755,7 @@ function updateDisplay() {
   document.getElementById('answerBtn').style.display = 'none';
   // Refresh the overlearning mastery ticker for the current assignment
   renderMasteryDisplay();
+  updateContinueHint();
 
   if (gameMode === 'bass') {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreBass}`;
@@ -1864,6 +1942,8 @@ async function startGame() {
 
   score = 0;
   holdStart = 0;
+  listenPaused = false;
+  awaitingContinue = MANUAL_ADVANCE; // first assignment waits for you too
 
   document.getElementById('streakDots').innerHTML = '';
   document.getElementById('holdProgress').style.width = '0%';
@@ -2120,6 +2200,19 @@ function gameLoop() {
   if (!gameActive) return;
 
   const now = performance.now();
+
+  // Gate shut: the assignment hasn't started yet. Freeze the clock, ignore the
+  // mic completely — a note still ringing from the last answer must not count.
+  if (!listenGateOpen()) {
+    roundStart = now;
+    document.getElementById('timerBar').style.width = '100%';
+    document.getElementById('holdProgress').style.width = '0%';
+    updateContinueHint();
+    animFrame = requestAnimationFrame(gameLoop);
+    return;
+  }
+  updateContinueHint();
+
   const elapsed = now - roundStart;
 
   // Timer bar
@@ -2569,6 +2662,15 @@ function onSuccess() {
   // as a success — that's the whole point of the overlearning model.
   const wasClean = !currentRoundHasMistake;
 
+  // Manual advance: shut the gate so the next assignment waits for you. Without
+  // this the mic is live the instant the next target appears — and in Target
+  // Notes the next card's first note is deliberately the note you just sang,
+  // so it would score itself before you'd even seen the card.
+  if (MANUAL_ADVANCE) {
+    awaitingContinue = true;
+    updateContinueHint();
+  }
+
   // Note: overlearning progress is committed per-branch below — not here, because
   // in multi-note modes (lick, scale, melody) onSuccess fires once per note and
   // we only want to commit when the WHOLE assignment is done.
@@ -2915,16 +3017,26 @@ function onSuccess() {
       if (crossedCard) {
         const nc = targetSequence[targetSeqIndex];
         const newRootPc = ((nc.cardRoot % 12) + 12) % 12;
-        const newRootName = jazzNoteName(newRootPc);
-        if (newRootName !== currentKeyDisplay) {
-          currentKeyDisplay = newRootName;
-        }
-        // Short pause + play reference note (the shared pivot) before continuing
+        currentKeyDisplay = jazzNoteName(newRootPc);
         updateDisplay();
-        setTimeout(() => {
+        // A new card means a new chord, and its first note is the pivot you
+        // just sang — so it has to be announced, or the card changes silently
+        // under you and the pivot scores itself. melodyPlaying keeps the mic
+        // out of it while the announcement runs.
+        melodyPlaying = true;
+        const beginCard = () => {
+          melodyPlaying = false;
           roundStart = performance.now();
+          updateContinueHint();
           animFrame = requestAnimationFrame(gameLoop);
-        }, 200);
+        };
+        if (ANNOUNCE_VOICE) {
+          speak(`${speechify(currentKeyDisplay)} ${targetQuality}`, beginCard);
+        } else {
+          // Announcements off — still leave a beat to see the new card. No cue
+          // sound: the pivot is meant to be carried over, not handed back.
+          setTimeout(beginCard, 700);
+        }
       } else {
         updateDisplay();
         roundStart = performance.now();
@@ -3080,6 +3192,9 @@ function endGame() {
 
   gameActive = false;
   melodyPlaying = false;
+  awaitingContinue = false;
+  listenPaused = false;
+  updateContinueHint();
   if (animFrame) cancelAnimationFrame(animFrame);
   stopMic();
 
@@ -3371,6 +3486,7 @@ function loadSettingsUI() {
   document.getElementById('sHidePiano').checked = s.hidePiano === true;
   document.getElementById('sHideTarget').checked = s.hideTarget === true;
   document.getElementById('sPlayKeyboard').checked = s.playKeyboard !== false;
+  document.getElementById('sManualAdvance').checked = s.manualAdvance === true;
   updateSettingDisplay();
 }
 
@@ -3419,6 +3535,7 @@ function applySettings(s) {
   HIDE_PIANO = s.hidePiano === true;
   HIDE_TARGET = s.hideTarget === true;
   PLAY_KEYBOARD = s.playKeyboard !== false;
+  MANUAL_ADVANCE = s.manualAdvance === true;
   applyHidePiano();
   if (typeof pkApplyEnabled === 'function') pkApplyEnabled(PLAY_KEYBOARD);
   // Re-render current round if game is active so HIDE_TARGET takes effect immediately
@@ -3450,6 +3567,7 @@ function saveSettings() {
     hidePiano: document.getElementById('sHidePiano').checked,
     hideTarget: document.getElementById('sHideTarget').checked,
     playKeyboard: document.getElementById('sPlayKeyboard').checked,
+    manualAdvance: document.getElementById('sManualAdvance').checked,
   };
   localStorage.setItem('notechaser_settings', JSON.stringify(s));
   applySettings(s);

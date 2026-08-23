@@ -1094,6 +1094,54 @@ body::before {
   color: var(--red);
 }
 
+/* Listen gate prompt */
+.continue-hint {
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 9px 16px;
+  margin: 6px auto 0;
+  max-width: 420px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--surface);
+  color: var(--text-dim);
+}
+.continue-hint kbd {
+  display: inline-block;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.72rem;
+  color: inherit;
+}
+.continue-hint.waiting {
+  color: var(--cyan);
+  border-color: var(--cyan-dim);
+  box-shadow: var(--glow-cyan);
+  animation: continuePulse 1.4s ease-in-out infinite;
+}
+.continue-hint.paused {
+  color: var(--yellow);
+  border-color: #ffcc0044;
+}
+.continue-hint.live {
+  color: var(--green);
+  border-color: var(--green-dim);
+  font-size: 0.75rem;
+  padding: 6px 12px;
+  opacity: 0.75;
+}
+@keyframes continuePulse {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+
 /* ── PLAYABLE KEYBOARD DOCK ── */
 .pk-dock {
   position: fixed;
