@@ -377,8 +377,7 @@ let hiScoreTarget = parseInt(localStorage.getItem('notechaser_hi_target') || '0'
 
 let currentKeyDisplay = ''; // jazz-friendly key name for current round
 
-let audioCtx = null;
-let masterGain = null;
+// audioCtx / masterGain live in js/audio.js
 let analyser = null;
 let micStream = null;
 let gameActive = false;
@@ -1004,22 +1003,17 @@ function playAnswer() {
     return;
   }
   melodyPlaying = true;
-  // Play all chord tones as arpeggio so the user can hear each note
-  let i = 0;
-  function playNext() {
-    if (i < notes.length) {
-      playNote(notes[i], 0.6);
-      i++;
-      setTimeout(playNext, 400);
-    } else {
-      // Then stack them together
-      setTimeout(() => {
-        notes.forEach(n => playNote(n, 1.2));
-        setTimeout(() => { melodyPlaying = false; }, 1400);
-      }, 300);
-    }
-  }
-  playNext();
+  // Play all chord tones as arpeggio so the user can hear each note, then
+  // stack them together
+  const spacing = 0.4;
+  const events = notes.map((midi, i) => ({ notes: midi, at: i * spacing, dur: 0.6 }));
+  const stackAt = notes.length * spacing + 0.3;
+  events.push({ notes: [...notes], at: stackAt, dur: 1.2 });
+
+  playSequence(events, {
+    totalDur: stackAt + 1.4,
+    onEnd: () => { melodyPlaying = false; },
+  });
 }
 
 function replayBaseNote() {
@@ -1101,117 +1095,6 @@ function updatePianoHighlights(fromMidi, targetMidi, singingMidi) {
 }
 
 // ── AUDIO ──
-function initAudio() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    // Master gain + compressor for balanced output (especially vs speech on mobile)
-    const compressor = audioCtx.createDynamicsCompressor();
-    compressor.threshold.value = -20;
-    compressor.knee.value = 10;
-    compressor.ratio.value = 4;
-    compressor.attack.value = 0.003;
-    compressor.release.value = 0.15;
-    compressor.connect(audioCtx.destination);
-    masterGain = audioCtx.createGain();
-    masterGain.gain.value = 0.6; // leave headroom for speech
-    masterGain.connect(compressor);
-  }
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-}
-
-function playNote(midi, duration = 2) {
-  initAudio();
-  const freq = midiToFreq(midi);
-  const now = audioCtx.currentTime;
-
-  // Rich tone: triangle + sine
-  const osc1 = audioCtx.createOscillator();
-  const osc2 = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-
-  osc1.type = 'triangle';
-  osc1.frequency.value = freq;
-  osc2.type = 'sine';
-  osc2.frequency.value = freq;
-
-  const mix1 = audioCtx.createGain();
-  const mix2 = audioCtx.createGain();
-  mix1.gain.value = 0.5;
-  mix2.gain.value = 0.3;
-
-  osc1.connect(mix1);
-  osc2.connect(mix2);
-  mix1.connect(gain);
-  mix2.connect(gain);
-  gain.connect(masterGain);
-
-  // Envelope
-  gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(0.35, now + 0.03);
-  gain.gain.exponentialRampToValueAtTime(0.15, now + duration * 0.5);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-  osc1.start(now);
-  osc2.start(now);
-  osc1.stop(now + duration);
-  osc2.stop(now + duration);
-}
-
-function playSuccessChime() {
-  initAudio();
-  const now = audioCtx.currentTime;
-  [0, 0.08, 0.16].forEach((t, i) => {
-    const osc = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = [880, 1108.73, 1318.51][i]; // A5, C#6, E6
-    osc.connect(g);
-    g.connect(masterGain);
-    g.gain.setValueAtTime(0, now + t);
-    g.gain.linearRampToValueAtTime(0.12, now + t + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.25);
-    osc.start(now + t);
-    osc.stop(now + t + 0.25);
-  });
-}
-
-function playFailSound() {
-  initAudio();
-  const now = audioCtx.currentTime;
-  const osc = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  osc.type = 'sawtooth';
-  osc.frequency.setValueAtTime(200, now);
-  osc.frequency.linearRampToValueAtTime(80, now + 0.4);
-  osc.connect(g);
-  g.connect(masterGain);
-  g.gain.setValueAtTime(0.15, now);
-  g.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-  osc.start(now);
-  osc.stop(now + 0.5);
-}
-
-// Short "nope" chime — fires when a mistake is detected mid-round. Much
-// softer than playFailSound (which is reserved for game-over). Two quick
-// descending triangle tones: F#4 → D4 (minor third down), total ~240ms.
-function playMistakeChime() {
-  initAudio();
-  const now = audioCtx.currentTime;
-  [0, 0.06].forEach((t, i) => {
-    const osc = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.value = [369.99, 293.66][i]; // F#4, D4
-    osc.connect(g);
-    g.connect(masterGain);
-    g.gain.setValueAtTime(0, now + t);
-    g.gain.linearRampToValueAtTime(0.08, now + t + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.18);
-    osc.start(now + t);
-    osc.stop(now + t + 0.18);
-  });
-}
-
 // ── PITCH DETECTION (Autocorrelation) ──
 async function startMic() {
   // On mobile, try without constraints first if strict constraints fail
@@ -1311,10 +1194,11 @@ function speak(text, callback) {
   // Cancel any queued speech to avoid pile-ups
   speechSynthesis.cancel();
 
-  // Duck music volume during speech so voice is clearly heard
-  if (masterGain) {
-    masterGain.gain.setTargetAtTime(0.15, audioCtx.currentTime, 0.05);
-  }
+  // Duck music volume during speech so voice is clearly heard. Ref-counted in
+  // the engine: an overlapping announcement can't strand the mix quiet, and a
+  // stale fallback timer can't un-duck one that's still talking.
+  initAudio();
+  duckAudio();
 
   const utter = new SpeechSynthesisUtterance(text);
   utter.rate = 1;
@@ -1325,10 +1209,7 @@ function speak(text, callback) {
   const finish = () => {
     if (done) return;
     done = true;
-    // Restore music volume
-    if (masterGain) {
-      masterGain.gain.setTargetAtTime(0.6, audioCtx.currentTime, 0.1);
-    }
+    unduckAudio(); // restore music volume
     if (callback) callback();
   };
 
@@ -1347,31 +1228,30 @@ function announceScale(rootMidi, scaleName, callback) {
 }
 
 function playChord(rootMidi, chordIntervals, callback) {
-  initAudio();
   melodyPlaying = true;
-  const arpeggioSpacing = 250;
+  const arpeggioSpacing = 0.25; // seconds
   const holdDuration = 1.2;
 
-  // Arpeggio up
-  chordIntervals.forEach((semitones, i) => {
-    setTimeout(() => {
-      playNote(rootMidi + semitones, holdDuration);
-    }, i * arpeggioSpacing);
+  // Arpeggio up, then the whole voicing stacked
+  const events = chordIntervals.map((semitones, i) => ({
+    notes: rootMidi + semitones,
+    at: i * arpeggioSpacing,
+    dur: holdDuration,
+  }));
+  const stackTime = chordIntervals.length * arpeggioSpacing;
+  events.push({
+    notes: chordIntervals.map(s => rootMidi + s),
+    at: stackTime,
+    dur: 1.0,
   });
 
-  // Stack all notes after arpeggio
-  const stackTime = chordIntervals.length * arpeggioSpacing;
-  setTimeout(() => {
-    chordIntervals.forEach(semitones => {
-      playNote(rootMidi + semitones, 1.0);
-    });
-  }, stackTime);
-
-  const totalTime = stackTime + 1200;
-  setTimeout(() => {
-    melodyPlaying = false;
-    if (callback) callback();
-  }, totalTime);
+  playSequence(events, {
+    totalDur: stackTime + 1.2,
+    onEnd: () => {
+      melodyPlaying = false;
+      if (callback) callback();
+    },
+  });
 }
 
 // ── HARMONIC MELODY GENERATION ──
@@ -1469,56 +1349,55 @@ function generateMelody(length) {
 
 function playMelody(notes, callback) {
   melodyPlaying = true;
-  const spacing = 1200; // ms between notes
-  notes.forEach((midi, i) => {
-    setTimeout(() => {
-      playNote(midi, 1);
+  const spacing = 1.2; // seconds between notes
+  const events = notes.map((midi, i) => ({ notes: midi, at: i * spacing, dur: 1 }));
+  playSequence(events, {
+    totalDur: notes.length * spacing,
+    onNote: (ev, i) => {
       // Highlight current note on piano during playback
-      updatePianoHighlights(null, midi, null);
+      updatePianoHighlights(null, ev.notes, null);
       document.getElementById('intervalDisplay').textContent = `Listen... ${i + 1}/${notes.length}`;
-    }, i * spacing);
+    },
+    onEnd: () => {
+      melodyPlaying = false;
+      if (callback) callback();
+    },
   });
-  setTimeout(() => {
-    melodyPlaying = false;
-    if (callback) callback();
-  }, notes.length * spacing);
 }
 
 function playLick(notes, callback) {
   melodyPlaying = true;
   // Eighth note duration from BPM: one beat = 60/BPM seconds, eighth = half a beat
-  const eighthMs = (60 / lickBPM) * 1000 / 2;
+  const eighth = (60 / lickBPM) / 2; // seconds
   // Swing ratios: straight = 1:1, swing = ~2:1 (triplet), hard = 3:1
   const swingRatio = lickFeel === 'hard' ? 0.75 : lickFeel === 'swing' ? 0.667 : 0.5;
   // Duration of each note (slightly shorter than spacing for articulation)
-  const noteDur = eighthMs * 1.8 / 1000; // in seconds for playNote
+  const noteDur = eighth * 1.8;
 
-  // Calculate timing for each note with swing
-  const times = [];
+  // Calculate timing for each note with swing. Handed to the audio clock in
+  // one go — at 240 BPM an eighth is 125ms, and setTimeout drift used to eat
+  // a chunk of that.
+  const events = [];
   let t = 0;
   for (let i = 0; i < notes.length; i++) {
-    times.push(t);
+    events.push({ notes: notes[i], at: t, dur: noteDur });
     // Swing: long-short pattern on pairs of eighth notes
-    if (i % 2 === 0) {
-      t += eighthMs * 2 * swingRatio; // long
-    } else {
-      t += eighthMs * 2 * (1 - swingRatio); // short
-    }
+    t += i % 2 === 0
+      ? eighth * 2 * swingRatio      // long
+      : eighth * 2 * (1 - swingRatio); // short
   }
 
-  notes.forEach((midi, i) => {
-    setTimeout(() => {
-      playNote(midi, noteDur);
-      updatePianoHighlights(null, midi, null);
+  playSequence(events, {
+    totalDur: events[events.length - 1].at + eighth * 2,
+    onNote: (ev, i) => {
+      updatePianoHighlights(null, ev.notes, null);
       document.getElementById('intervalDisplay').textContent = `Listen... ${i + 1}/${notes.length}`;
-    }, times[i]);
+    },
+    onEnd: () => {
+      melodyPlaying = false;
+      if (callback) callback();
+    },
   });
-
-  const totalTime = times[times.length - 1] + eighthMs * 2;
-  setTimeout(() => {
-    melodyPlaying = false;
-    if (callback) callback();
-  }, totalTime);
 }
 
 // ── CHORD MODE HELPERS ──
@@ -1633,21 +1512,6 @@ function updateProgressionPiano() {
   });
 }
 
-function playChordConfirmBeep() {
-  initAudio();
-  const osc = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  const now = audioCtx.currentTime;
-  osc.type = 'sine';
-  osc.frequency.value = 880;
-  osc.connect(g);
-  g.connect(masterGain);
-  g.gain.setValueAtTime(0.1, now);
-  g.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-  osc.start(now);
-  osc.stop(now + 0.15);
-}
-
 // ── BASS MODE HELPERS ──
 function pickBassKey() {
   return Math.floor(Math.random() * 12);
@@ -1679,18 +1543,19 @@ function buildBassRound() {
 function playCadence(chordArrays, callback) {
   melodyPlaying = true;
   const chordDuration = 1.2;
-  const chordSpacing = 1500;
+  const chordSpacing = 1.5; // seconds
 
-  chordArrays.forEach((notes, i) => {
-    setTimeout(() => {
-      notes.forEach(midi => playNote(midi, chordDuration));
-    }, i * chordSpacing);
+  playSequence(chordArrays.map((notes, i) => ({
+    notes,
+    at: i * chordSpacing,
+    dur: chordDuration,
+  })), {
+    totalDur: chordArrays.length * chordSpacing,
+    onEnd: () => {
+      melodyPlaying = false;
+      if (callback) callback();
+    },
   });
-
-  setTimeout(() => {
-    melodyPlaying = false;
-    if (callback) callback();
-  }, chordArrays.length * chordSpacing);
 }
 
 function announceBassKey(pitchClass, isMinor, callback) {
@@ -1959,13 +1824,13 @@ function playChordForMode(rootMidi, intervals, callback) {
   } else if (chordPlayback === 'stack') {
     // Stack only — play all notes simultaneously
     melodyPlaying = true;
-    intervals.forEach(semitones => {
-      playNote(rootMidi + semitones, 1.5);
+    playSequence([{ notes: intervals.map(s => rootMidi + s), at: 0, dur: 1.5 }], {
+      totalDur: 1.7,
+      onEnd: () => {
+        melodyPlaying = false;
+        if (callback) callback();
+      },
     });
-    setTimeout(() => {
-      melodyPlaying = false;
-      if (callback) callback();
-    }, 1700);
   } else {
     // Arpeggio + stack (existing behavior)
     playChord(rootMidi, intervals, callback);

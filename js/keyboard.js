@@ -161,43 +161,15 @@ function buildPlayKeyboard() {
 }
 
 // ── VOICES ──
+// Sounding is the engine's job (js/audio.js) — a key press is just a held
+// voice, released when the finger lifts.
 function pkStartVoice(midi) {
-  if (typeof initAudio !== 'function') return;
-  initAudio();
+  if (typeof startVoice !== 'function') return;
   if (pkVoices.has(midi)) pkStopVoice(midi);
-
-  const now = audioCtx.currentTime;
-  const freq = midiToFreq(midi);
-
-  const osc1 = audioCtx.createOscillator();
-  const osc2 = audioCtx.createOscillator();
-  const mix1 = audioCtx.createGain();
-  const mix2 = audioCtx.createGain();
-  const gain = audioCtx.createGain();
-
-  osc1.type = 'triangle';
-  osc1.frequency.value = freq;
-  osc2.type = 'sine';
-  osc2.frequency.value = freq;
-  mix1.gain.value = 0.5;
-  mix2.gain.value = 0.3;
-
-  osc1.connect(mix1);
-  osc2.connect(mix2);
-  mix1.connect(gain);
-  mix2.connect(gain);
-  gain.connect(masterGain);
-
-  // Pluck attack, then settle to a sustain level that holds until release
-  gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(0.35, now + 0.02);
-  gain.gain.setTargetAtTime(0.16, now + 0.02, 0.35);
-
-  osc1.start(now);
-  osc2.start(now);
-
+  const voice = startVoice(midi);
+  if (!voice) return;
   const timer = setTimeout(() => pkNoteOff(midi, true), PK_MAX_HOLD_MS);
-  pkVoices.set(midi, { osc1, osc2, gain, timer });
+  pkVoices.set(midi, { voice, timer });
 }
 
 function pkStopVoice(midi) {
@@ -205,13 +177,7 @@ function pkStopVoice(midi) {
   if (!v) return;
   pkVoices.delete(midi);
   clearTimeout(v.timer);
-  const now = audioCtx.currentTime;
-  const current = Math.max(v.gain.gain.value, 0.0001);
-  v.gain.gain.cancelScheduledValues(now);
-  v.gain.gain.setValueAtTime(current, now);
-  v.gain.gain.exponentialRampToValueAtTime(0.0005, now + 0.28);
-  v.osc1.stop(now + 0.32);
-  v.osc2.stop(now + 0.32);
+  stopVoice(v.voice);
 }
 
 // ── NOTE ON / OFF ──
