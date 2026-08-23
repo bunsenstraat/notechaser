@@ -2710,6 +2710,13 @@ function onSuccess() {
     flash.classList.remove('show');
     void flash.offsetWidth;
     flash.classList.add('show');
+  } else if (gameMode !== 'bass' && gameMode !== 'chord' && gameMode !== 'progression') {
+    // The round is tainted, so no celebration — but the note WAS right and the
+    // player still needs to hear that it landed, otherwise every remaining note
+    // of a multi-note assignment (melody, scale, lick, target card) responds
+    // with silence. Softer confirm beep instead of the reward chime.
+    // Bass/chord/progression already beep per note where they advance.
+    playChordConfirmBeep();
   }
 
   holdStart = 0;
