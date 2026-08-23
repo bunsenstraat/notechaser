@@ -1085,6 +1085,9 @@ document.getElementById('skipHint')?.addEventListener('click', () => {
 });
 
 function updatePianoHighlights(fromMidi, targetMidi, singingMidi) {
+  // "Hide note to sing" also has to hide it on the keyboard — otherwise the
+  // lit key is the answer, and the play-keyboard dock mirrors it too.
+  if (HIDE_TARGET) targetMidi = null;
   document.querySelectorAll('.piano-key').forEach(k => {
     k.classList.remove('active-from', 'active-target', 'active-singing');
     const m = parseInt(k.dataset.midi);
@@ -1478,7 +1481,9 @@ function chooseNextChord() {
 }
 
 function updateChordPiano(singingMidi, heldMidiNotes) {
-  const showTargets = isChordVoiceMode(); // only show target notes in voice modes (sing/call)
+  // Only show target notes in voice modes (sing/call), and not at all when the
+  // player has asked for the notes to be hidden
+  const showTargets = isChordVoiceMode() && !HIDE_TARGET;
   document.querySelectorAll('.piano-key').forEach(k => {
     k.classList.remove('active-from', 'active-target', 'active-singing');
     const m = parseInt(k.dataset.midi);
@@ -1571,7 +1576,7 @@ function updateBassPiano(singingMidi) {
     // Green for already-hit bass notes
     if (bassNotes.slice(0, bassIndex).includes(m)) k.classList.add('active-singing');
     // Cyan for current target
-    if (bassIndex < bassNotes.length && m === bassNotes[bassIndex]) k.classList.add('active-target');
+    if (!HIDE_TARGET && bassIndex < bassNotes.length && m === bassNotes[bassIndex]) k.classList.add('active-target');
     // Magenta for what user is currently playing
     if (singingMidi !== null && m === singingMidi) k.classList.add('active-from');
   });
@@ -1682,7 +1687,9 @@ function updateDisplay() {
       ? `${chordName}`
       : `${currentCadence.name} — ${chordName} (${bassIndex + 1}/${bassNotes.length})`;
     document.getElementById('noteFrom').textContent = `Key: ${currentKeyDisplay}`;
-    document.getElementById('noteTarget').textContent = bassIndex < bassNotes.length ? midiToName(bassNotes[bassIndex]) : '✓';
+    document.getElementById('noteTarget').textContent = bassIndex >= bassNotes.length
+      ? '✓'
+      : (HIDE_TARGET ? '?' : midiToName(bassNotes[bassIndex]));
     document.getElementById('arrowDir').innerHTML = '&#127928;';
     document.getElementById('replayHint').innerHTML = isSingle
       ? 'Press <kbd>SPACE</kbd> or tap here to replay chord'
@@ -1715,7 +1722,7 @@ function updateDisplay() {
       document.getElementById('intervalDisplay').textContent = `Note ${melodyIndex + 1} / ${melodyNotes.length}`;
       document.getElementById('noteFrom').textContent = `Rd: ${melodyRound + 1}`;
     }
-    document.getElementById('noteTarget').textContent = midiToName(melodyNotes[melodyIndex]);
+    document.getElementById('noteTarget').textContent = HIDE_TARGET ? '?' : midiToName(melodyNotes[melodyIndex]);
     document.getElementById('arrowDir').innerHTML = '&#127926;';
     document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to hear ' + (gameMode === 'harmonic' ? 'chord + melody' : 'melody') + ' again';
     updatePianoHighlights(null, melodyNotes[melodyIndex], null);
@@ -1725,7 +1732,7 @@ function updateDisplay() {
     const dirArrow = scaleCurrentDir === 'down' ? '↓' : scaleCurrentDir === 'up and down' ? '↕' : '↑';
     document.getElementById('intervalDisplay').textContent = `${scale.name} ${dirArrow} — Note ${scaleNoteIndex + 1} / ${scaleNotes.length}`;
     document.getElementById('noteFrom').textContent = `Root: ${midiToName(scaleRoot)}`;
-    document.getElementById('noteTarget').textContent = midiToName(scaleNotes[scaleNoteIndex]);
+    document.getElementById('noteTarget').textContent = HIDE_TARGET ? '?' : midiToName(scaleNotes[scaleNoteIndex]);
     document.getElementById('arrowDir').innerHTML = '&#127925;';
     document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to hear scale again';
     updatePianoHighlights(null, scaleNotes[scaleNoteIndex], null);
@@ -1733,7 +1740,7 @@ function updateDisplay() {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreLick}`;
     document.getElementById('intervalDisplay').textContent = `${currentLick.name} in ${currentKeyDisplay} — Note ${lickNoteIndex + 1} / ${lickNotes.length}`;
     document.getElementById('noteFrom').textContent = `Key: ${currentKeyDisplay}`;
-    document.getElementById('noteTarget').textContent = midiToName(lickNotes[lickNoteIndex]);
+    document.getElementById('noteTarget').textContent = HIDE_TARGET ? '?' : midiToName(lickNotes[lickNoteIndex]);
     document.getElementById('arrowDir').innerHTML = '&#127927;';
     document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay lick';
     updatePianoHighlights(null, lickNotes[lickNoteIndex], null);
@@ -1746,7 +1753,7 @@ function updateDisplay() {
       const totalCards = targetCountPerRound;
       document.getElementById('intervalDisplay').textContent = `Target Notes · Card ${t.cardIdx + 1}/${totalCards}`;
       document.getElementById('noteFrom').textContent = `${rootName} ${targetQuality} · ${t.cardPattern}`;
-      document.getElementById('noteTarget').textContent = `${t.degree} → ${midiToName(t.midi)}`;
+      document.getElementById('noteTarget').textContent = `${t.degree} → ${HIDE_TARGET ? '?' : midiToName(t.midi)}`;
     }
     document.getElementById('arrowDir').innerHTML = '&#127919;';
     document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay current note';
@@ -1775,10 +1782,7 @@ function updateDisplay() {
     document.getElementById('noteTarget').textContent = HIDE_TARGET ? '?' : (currentTargetName || midiToNameJazz(currentTargetMidi));
     document.getElementById('arrowDir').innerHTML = currentDir > 0 ? '&#9650;' : '&#9660;';
     document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay base note';
-    // Hide the target on the piano too when HIDE_TARGET is on, unless we're in instrument mode
-    // (instrument mode already doesn't highlight a target; see onSuccess reveal).
-    const pianoTarget = HIDE_TARGET ? null : currentTargetMidi;
-    updatePianoHighlights(currentBaseMidi, pianoTarget, null);
+    updatePianoHighlights(currentBaseMidi, currentTargetMidi, null);
   }
 }
 
