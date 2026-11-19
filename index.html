@@ -358,6 +358,24 @@
       </div>
     </div>
 
+    <div class="settings-group">
+      <div class="settings-group-title">MIDI Out</div>
+      <div class="setting-row" title="Send every note the app plays to an external synth or DAW. Turns MIDI keyboard input off — the two can't be on together.">
+        <span class="setting-label">Device</span>
+        <select class="setting-select" id="sMidiOut"><option value="">Off</option></select>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Channel</span>
+        <select class="setting-select" id="sMidiOutChannel"></select>
+      </div>
+      <div class="setting-row" title="Also play the app's own piano sound alongside the external synth">
+        <span class="setting-label">Built-in sound too</span>
+        <input type="checkbox" id="sMidiOutBuiltin">
+      </div>
+      <button class="setting-find-btn" id="midiOutFindBtn" onclick="findMidiOutDevices()">Find MIDI devices</button>
+      <div class="setting-note" id="midiOutNote"></div>
+    </div>
+
     <button class="settings-save" onclick="saveSettings()">SAVE</button>
     <button class="settings-reset" onclick="resetSettings()">Reset to Defaults</button>
   </div>

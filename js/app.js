@@ -28,6 +28,7 @@ const DEFAULTS = {
   sensitivity: 5, confidence: 20,
   announceVoice: true, autoPlayIntro: true, hidePiano: false, hideTarget: false,
   playKeyboard: true, manualAdvance: false,
+  midiOutId: '', midiOutName: '', midiOutChannel: 0, midiOutBuiltin: false,
 };
 
 // Toggleable behaviors (loaded from settings)
@@ -37,6 +38,7 @@ let HIDE_PIANO = false;
 let HIDE_TARGET = false;
 let PLAY_KEYBOARD = true;
 let MANUAL_ADVANCE = false;
+let MIDI_OUT_CFG = { id: '', name: '', channel: 0, builtin: false };
 
 // Mutable ranges (loaded from settings)
 let RANGE_LOW = 48;
@@ -114,6 +116,9 @@ function connectMidiInputs() {
 }
 
 function handleMidiMessage(msg) {
+  // MIDI in and MIDI out are never both on: with MIDI out sending, anything
+  // arriving here could be our own notes coming back
+  if (!useMidi) return;
   const [status, note, velocity] = msg.data;
   const command = status & 0xf0;
   if (command === 0x90 && velocity > 0) {
@@ -269,6 +274,11 @@ function updateMidiChordDisplay() {
 }
 
 function setInputMode(midi) {
+  if (midi && MIDI_OUT_CFG.id) {
+    // Last choice wins — MIDI keyboard input means MIDI out goes off
+    setMidiOutConfig({ id: '', name: '', channel: MIDI_OUT_CFG.channel, builtin: MIDI_OUT_CFG.builtin });
+    inputHintNotice = 'MIDI out turned off';
+  }
   useMidi = midi;
   document.querySelectorAll('.input-mode-btn').forEach(b => {
     b.classList.toggle('selected', (b.dataset.input === 'midi') === midi);
@@ -276,12 +286,39 @@ function setInputMode(midi) {
   refreshInputHint();
 }
 
+let inputHintNotice = ''; // one-off "X was turned off" message, cleared on start
+
 function refreshInputHint() {
-  document.getElementById('micHint').textContent = isChordIdentify()
+  let text = isChordIdentify()
     ? 'No microphone needed — listen, then pick the chord'
     : useMidi
       ? 'Connect a MIDI keyboard — or use the on-screen keyboard at the bottom'
       : 'Microphone access required for pitch detection';
+  if (MIDI_OUT_CFG.id) {
+    const dev = midiOutActive()
+      ? midiOutDeviceName()
+      : `${MIDI_OUT_CFG.name || 'device'} (not connected — built-in sound)`;
+    text += ` · MIDI out → ${dev}`;
+  }
+  if (inputHintNotice) text = `${inputHintNotice} · ${text}`;
+  document.getElementById('micHint').textContent = text;
+}
+
+// Called by the audio engine when a MIDI device appears or disappears
+function onMidiOutChanged() {
+  refreshInputHint();
+}
+
+// Apply and persist a MIDI out choice without touching the rest of settings
+function setMidiOutConfig(cfg) {
+  MIDI_OUT_CFG = { id: cfg.id || '', name: cfg.name || '', channel: cfg.channel | 0, builtin: !!cfg.builtin };
+  const saved = JSON.parse(localStorage.getItem('notechaser_settings') || 'null') || { ...DEFAULTS };
+  Object.assign(saved, {
+    midiOutId: MIDI_OUT_CFG.id, midiOutName: MIDI_OUT_CFG.name,
+    midiOutChannel: MIDI_OUT_CFG.channel, midiOutBuiltin: MIDI_OUT_CFG.builtin,
+  });
+  localStorage.setItem('notechaser_settings', JSON.stringify(saved));
+  return configureMidiOut(MIDI_OUT_CFG);
 }
 
 // ── STATE ──
@@ -2062,6 +2099,9 @@ function playChordForMode(rootMidi, intervals, callback) {
 
 async function startGame() {
   TIMEOUT = parseInt(document.getElementById('timeSlider').value) * 1000;
+  inputHintNotice = '';
+  // Rebind MIDI out if the device was plugged in after the page loaded
+  if (MIDI_OUT_CFG.id && !midiOutActive()) await configureMidiOut(MIDI_OUT_CFG);
 
   if (isChordIdentify()) {
     initAudio(); // answers come from the buttons — nothing to listen to
@@ -3660,7 +3700,75 @@ function loadSettingsUI() {
   document.getElementById('sHideTarget').checked = s.hideTarget === true;
   document.getElementById('sPlayKeyboard').checked = s.playKeyboard !== false;
   document.getElementById('sManualAdvance').checked = s.manualAdvance === true;
+  loadMidiOutUI(s);
   updateSettingDisplay();
+}
+
+// ── MIDI OUT SETTINGS ──
+function loadMidiOutUI(s) {
+  const dev = document.getElementById('sMidiOut');
+  const ch = document.getElementById('sMidiOutChannel');
+  const findBtn = document.getElementById('midiOutFindBtn');
+  if (!ch.options.length) {
+    for (let i = 0; i < 16; i++) ch.add(new Option(`Channel ${i + 1}`, String(i)));
+  }
+  ch.value = String(s.midiOutChannel || 0);
+  document.getElementById('sMidiOutBuiltin').checked = s.midiOutBuiltin === true;
+
+  // Keep "Off" plus the saved device until a real list comes back
+  dev.innerHTML = '';
+  dev.add(new Option('Off', ''));
+  if (s.midiOutId) dev.add(new Option(s.midiOutName || 'Saved device', s.midiOutId));
+  dev.value = s.midiOutId || '';
+
+  if (!midiOutSupported()) {
+    dev.disabled = ch.disabled = true;
+    findBtn.style.display = 'none';
+    setMidiOutNote('MIDI out needs Chrome or Edge — this browser has no Web MIDI.', true);
+    return;
+  }
+  setMidiOutNote(useMidi ? 'Choosing a device switches input from MIDI keyboard to Microphone.' : '');
+  // Access already granted this session: just list, no button press needed
+  if (midiOutAccess) { findMidiOutDevices(true); return; }
+  // Already allowed? Fill the list without a permission prompt
+  if (navigator.permissions && navigator.permissions.query) {
+    navigator.permissions.query({ name: 'midi' })
+      .then(r => { if (r.state === 'granted') findMidiOutDevices(true); })
+      .catch(() => {});
+  }
+}
+
+async function findMidiOutDevices(quiet) {
+  const dev = document.getElementById('sMidiOut');
+  const keep = dev.value;
+  const keepName = dev.selectedOptions[0] ? dev.selectedOptions[0].text : '';
+  const outputs = await listMidiOutputs();
+  if (outputs === null) {
+    setMidiOutNote('MIDI access was blocked — allow it in the browser’s site settings.', true);
+    return;
+  }
+  dev.innerHTML = '';
+  dev.add(new Option('Off', ''));
+  outputs.forEach(o => dev.add(new Option(o.name, o.id)));
+  // Saved device not plugged in right now: keep it selectable, marked as such
+  if (keep && !outputs.some(o => o.id === keep)) {
+    const byName = outputs.find(o => o.name === keepName);
+    if (byName) dev.value = byName.id;
+    else { dev.add(new Option(`${keepName} (not connected)`, keep)); dev.value = keep; }
+  } else {
+    dev.value = keep;
+  }
+  if (!quiet || !outputs.length) {
+    setMidiOutNote(outputs.length
+      ? `${outputs.length} MIDI output${outputs.length > 1 ? 's' : ''} found.`
+      : 'No MIDI outputs found — connect one (or start a virtual MIDI port), then Find again.', !outputs.length);
+  }
+}
+
+function setMidiOutNote(text, warn) {
+  const el = document.getElementById('midiOutNote');
+  el.textContent = text;
+  el.classList.toggle('warn', !!warn);
 }
 
 function updateSettingDisplay() {
@@ -3709,6 +3817,16 @@ function applySettings(s) {
   HIDE_TARGET = s.hideTarget === true;
   PLAY_KEYBOARD = s.playKeyboard !== false;
   MANUAL_ADVANCE = s.manualAdvance === true;
+  MIDI_OUT_CFG = {
+    id: s.midiOutId || '', name: s.midiOutName || '',
+    channel: s.midiOutChannel | 0, builtin: s.midiOutBuiltin === true,
+  };
+  if (MIDI_OUT_CFG.id && useMidi) {
+    // Last choice wins — MIDI out means MIDI keyboard input goes off
+    setInputMode(false);
+    inputHintNotice = 'MIDI keyboard input turned off';
+  }
+  configureMidiOut(MIDI_OUT_CFG).then(refreshInputHint);
   applyHidePiano();
   if (typeof pkApplyEnabled === 'function') pkApplyEnabled(PLAY_KEYBOARD);
   // Re-render current round if game is active so HIDE_TARGET takes effect immediately
@@ -3741,6 +3859,13 @@ function saveSettings() {
     hideTarget: document.getElementById('sHideTarget').checked,
     playKeyboard: document.getElementById('sPlayKeyboard').checked,
     manualAdvance: document.getElementById('sManualAdvance').checked,
+    midiOutId: document.getElementById('sMidiOut').value,
+    midiOutName: (() => {
+      const o = document.getElementById('sMidiOut').selectedOptions[0];
+      return o && o.value ? o.text.replace(/ \(not connected\)$/, '') : '';
+    })(),
+    midiOutChannel: +document.getElementById('sMidiOutChannel').value || 0,
+    midiOutBuiltin: document.getElementById('sMidiOutBuiltin').checked,
   };
   localStorage.setItem('notechaser_settings', JSON.stringify(s));
   applySettings(s);

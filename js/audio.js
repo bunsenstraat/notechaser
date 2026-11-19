@@ -219,6 +219,10 @@ function registerVoice(voice) {
 function playNote(midi, duration = 2, when, levelScale = 1) {
   initAudio();
   const start = Math.max(when === undefined ? audioCtx.currentTime : when, audioCtx.currentTime);
+  if (midiOut) {
+    sendMidiNote(midi, start, duration);
+    if (!midiOutBuiltin) return;
+  }
   const buf = sampleBank.get(nearestAnchor(midi));
   if (buf) playSampledNote(midi, duration, start, NOTE_LEVEL * levelScale, buf);
   else playSynthNote(midi, duration, start, NOTE_LEVEL * 1.6 * levelScale);
@@ -319,10 +323,23 @@ function playSynthNote(midi, duration, start, level) {
 function startVoice(midi) {
   initAudio();
   const start = audioCtx.currentTime;
+  // Held key on MIDI out: note-on now, note-off when the finger lifts
+  let gen = null;
+  if (midiOut && midi >= 0 && midi <= 127) {
+    gen = midiNoteOnAt(midi, performance.now());
+    if (!midiOutBuiltin) {
+      return { startedAt: start, release() { midiNoteOffAt(midi, performance.now(), gen); } };
+    }
+  }
   const buf = sampleBank.get(nearestAnchor(midi));
-  return buf
+  const voice = buf
     ? playSampledNote(midi, 60, start, VOICE_LEVEL, buf)
     : playSynthNote(midi, 8, start, VOICE_LEVEL * 1.6);
+  if (gen !== null) {
+    const releaseBuiltin = voice.release;
+    voice.release = t => { midiNoteOffAt(midi, performance.now(), gen); releaseBuiltin(t); };
+  }
+  return voice;
 }
 
 function stopVoice(voice, releaseTime = 0.22) {
@@ -332,7 +349,148 @@ function stopVoice(voice, releaseTime = 0.22) {
 function stopAllVoices() {
   for (const v of [...activeVoices]) v.release(0.05);
   activeVoices.clear();
+  midiPanic();
 }
+
+// ── MIDI OUT ──
+// Sends the app's notes to an external synth or DAW. Mutually exclusive with
+// MIDI keyboard input (app.js enforces it): with only one direction open,
+// nothing the app sends can come back in and be scored as an answer.
+//
+// Note-ons go out with the same audio-clock timestamps as the built-in sound,
+// so melodies and swung licks stay tight on the synth. Note-offs are held
+// back and sent just ahead of time: if the same key is struck again before
+// an older note ends (an arpeggio note, then that note in the stacked chord),
+// the older note-off must not cut the newer note short.
+let midiOutAccess = null;
+let midiOut = null;           // MIDIOutput, or null → built-in sound only
+let midiOutId = '';           // saved device id; '' = off
+let midiOutName = '';         // fallback match if the id changes between sessions
+let midiOutChannel = 0;       // 0–15
+let midiOutBuiltin = false;   // also play the built-in sound
+const MIDI_OUT_VELOCITY = 96;
+const MIDI_OFF_LOOKAHEAD_MS = 100;
+
+const midiLatestOn = new Map(); // note -> { gen, at } of its most recent note-on
+let midiGenCounter = 0;
+const midiPendingOffs = [];     // { note, at, gen }
+let midiOffTimer = null;
+
+function midiOutSupported() { return !!navigator.requestMIDIAccess; }
+function midiOutActive() { return !!midiOut; }
+function midiOutDeviceName() { return midiOut ? midiOut.name : ''; }
+
+async function getMidiOutAccess() {
+  if (midiOutAccess) return midiOutAccess;
+  if (!midiOutSupported()) return null;
+  try {
+    midiOutAccess = await navigator.requestMIDIAccess();
+    // Unplugged → fall back to built-in sound rather than going silent
+    midiOutAccess.addEventListener('statechange', () => {
+      bindMidiOut();
+      if (typeof onMidiOutChanged === 'function') onMidiOutChanged();
+    });
+    return midiOutAccess;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function listMidiOutputs() {
+  const access = await getMidiOutAccess();
+  if (!access) return null;
+  return [...access.outputs.values()]
+    .filter(o => o.state !== 'disconnected')
+    .map(o => ({ id: o.id, name: o.name }));
+}
+
+function bindMidiOut() {
+  const prev = midiOut;
+  midiOut = null;
+  if (midiOutId && midiOutAccess) {
+    let out = midiOutAccess.outputs.get(midiOutId);
+    if (!out && midiOutName) {
+      out = [...midiOutAccess.outputs.values()].find(o => o.name === midiOutName);
+    }
+    if (out && out.state !== 'disconnected') midiOut = out;
+  }
+  if (prev && prev !== midiOut) midiPanic(prev);
+}
+
+async function configureMidiOut({ id, name, channel, builtin }) {
+  midiPanic(); // nothing left hanging on the old device/channel
+  midiOutId = id || '';
+  midiOutName = name || '';
+  midiOutChannel = Math.max(0, Math.min(15, channel | 0));
+  midiOutBuiltin = !!builtin;
+  if (midiOutId) await getMidiOutAccess();
+  bindMidiOut();
+  if (typeof onMidiOutChanged === 'function') onMidiOutChanged();
+  return !!midiOut;
+}
+
+// AudioContext time → the performance.now() moment it's actually heard, so
+// external notes land with the built-in ones
+function ctxTimeToPerfMs(t) {
+  if (audioCtx && audioCtx.getOutputTimestamp) {
+    const ts = audioCtx.getOutputTimestamp();
+    if (ts && ts.performanceTime) return ts.performanceTime + (t - ts.contextTime) * 1000;
+  }
+  return performance.now() + (t - (audioCtx ? audioCtx.currentTime : 0)) * 1000;
+}
+
+function sendMidiNote(midi, startCtxTime, duration) {
+  if (midi < 0 || midi > 127) return;
+  const on = ctxTimeToPerfMs(startCtxTime);
+  const gen = midiNoteOnAt(midi, on);
+  midiNoteOffAt(midi, on + duration * 1000, gen);
+}
+
+function midiNoteOnAt(note, at) {
+  const gen = ++midiGenCounter;
+  midiLatestOn.set(note, { gen, at });
+  try { midiOut.send([0x90 | midiOutChannel, note, MIDI_OUT_VELOCITY], at); } catch (e) {}
+  return gen;
+}
+
+function midiNoteOffAt(note, at, gen) {
+  midiPendingOffs.push({ note, at, gen });
+  pumpMidiOffs();
+}
+
+function pumpMidiOffs() {
+  const now = performance.now();
+  for (let i = midiPendingOffs.length - 1; i >= 0; i--) {
+    const off = midiPendingOffs[i];
+    if (off.at - now > MIDI_OFF_LOOKAHEAD_MS) continue;
+    midiPendingOffs.splice(i, 1);
+    // A newer strike of this key is sounding by then — it owns the key now,
+    // and its own note-off will end it
+    const latest = midiLatestOn.get(off.note);
+    if (latest && latest.gen > off.gen && latest.at <= off.at) continue;
+    if (midiOut) {
+      try { midiOut.send([0x80 | midiOutChannel, off.note, 0], off.at); } catch (e) {}
+    }
+  }
+  if (midiPendingOffs.length && !midiOffTimer) {
+    midiOffTimer = setInterval(pumpMidiOffs, 25);
+  } else if (!midiPendingOffs.length && midiOffTimer) {
+    clearInterval(midiOffTimer);
+    midiOffTimer = null;
+  }
+}
+
+// All notes off + all sound off: closing the tab or switching device must
+// never leave a note droning on the synth
+function midiPanic(out = midiOut) {
+  midiPendingOffs.length = 0;
+  if (!out) return;
+  try {
+    out.send([0xB0 | midiOutChannel, 123, 0]);
+    out.send([0xB0 | midiOutChannel, 120, 0]);
+  } catch (e) {}
+}
+window.addEventListener('pagehide', () => midiPanic());
 
 // ── SEQUENCES ──
 // events: [{ notes: midi | [midi], at: secondsFromStart, dur: seconds }]
