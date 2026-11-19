@@ -1094,6 +1094,149 @@ body::before {
   color: var(--red);
 }
 
+/* Listen gate prompt */
+.continue-hint {
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 9px 16px;
+  margin: 6px auto 0;
+  max-width: 420px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--surface);
+  color: var(--text-dim);
+}
+.continue-hint kbd {
+  display: inline-block;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.72rem;
+  color: inherit;
+}
+.continue-hint.waiting {
+  color: var(--cyan);
+  border-color: var(--cyan-dim);
+  box-shadow: var(--glow-cyan);
+  animation: continuePulse 1.4s ease-in-out infinite;
+}
+.continue-hint.paused {
+  color: var(--yellow);
+  border-color: #ffcc0044;
+}
+.continue-hint.live {
+  color: var(--green);
+  border-color: var(--green-dim);
+  font-size: 0.75rem;
+  padding: 6px 12px;
+  opacity: 0.75;
+}
+@keyframes continuePulse {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+
+/* ── CHORD IDENTIFY ── */
+.identify-grid { display: none; }
+
+/* In identify mode the answer buttons take the pitch meter's place */
+#game.identify-mode { min-height: 0; } /* let the grid scroll instead of the page growing under the dock */
+#game.identify-mode .pitch-area { display: none; }
+#game.identify-mode .identify-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
+  padding: 4px 2px 8px;
+}
+
+.identify-btn {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 12px 8px;
+  min-height: 52px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: center;
+  line-height: 1.25;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s, background 0.15s, opacity 0.15s;
+}
+.identify-btn:hover:not(:disabled) { border-color: var(--cyan-dim); background: var(--surface2); }
+.identify-btn:active:not(:disabled) { transform: scale(0.98); }
+.identify-btn .chord-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 400;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.identify-key {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 0.58rem;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
+.identify-btn.wrong {
+  border-color: var(--red-dim);
+  color: var(--red);
+  opacity: 0.45;
+  cursor: default;
+}
+.identify-btn.correct {
+  border-color: var(--green);
+  background: var(--green-dim);
+  box-shadow: var(--glow-green);
+  color: var(--green);
+}
+/* Types that sound identical to the right answer */
+.identify-btn.also {
+  border-color: var(--green-dim);
+  color: var(--green);
+}
+/* Skipped: this is what it was */
+.identify-btn.reveal {
+  border-color: var(--cyan);
+  box-shadow: var(--glow-cyan);
+  color: var(--cyan);
+}
+.identify-btn.correct .chord-label,
+.identify-btn.also .chord-label { color: var(--green); }
+
+@media (max-width: 600px) {
+  #game.identify-mode .identify-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .identify-btn { font-size: 0.8rem; padding: 10px 6px; min-height: 48px; }
+  /* The answer buttons are this mode's main control — everything else
+     gives up height so a phone shows several rows of them */
+  #game.identify-mode { gap: 8px; }
+  #game.identify-mode .challenge-area { padding: 4px 0; }
+  #game.identify-mode .interval-name { font-size: 1.1rem; }
+  #game.identify-mode .note-box-value { font-size: 1.5rem; }
+  #game.identify-mode .arrow-dir { font-size: 1.4rem; }
+  #game.identify-mode .replay-hint { padding: 6px 10px; }
+  #game.identify-mode .skip-hint { padding: 0 10px; }
+  #game.identify-mode .piano-wrap { padding: 4px 0; }
+  #game.identify-mode .piano { height: 40px; }
+}
+
 /* ── PLAYABLE KEYBOARD DOCK ── */
 .pk-dock {
   position: fixed;
