@@ -39,6 +39,7 @@ Hold the correct pitch (within ±50 cents) for half a second to lock it in. The 
 - ⏱️ **Adjustable time limit** with slider (3–20 seconds)
 - 🎯 **Visual pitch meter** — green = on target, yellow = close, red = way off
 - 🎵 **Piano visualization** highlighting base note, target, and what you're singing
+- 🎧 **Chord Identify** — hear a chord, name it from the chord types you selected (no mic needed; keys 1–9 answer). Types that sound identical with a random root (e.g. Major 2nd and Min7 RL-A) all count as correct
 - 🎹 **Collapsible playable keyboard** at the bottom of the exercise screen — tap to hear notes (multi-touch, glissando), and in MIDI input mode it doubles as an on-screen MIDI keyboard
 - 🔁 **Replay base note** mid-game with R key
 - ⏸ **ENTER pauses/resumes listening** any time — and with "Wait for ENTER before listening" on, every assignment waits for you instead of auto-starting while you're still singing the last one

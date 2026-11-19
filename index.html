@@ -98,6 +98,7 @@
         <button class="dir-btn chord-play-btn" data-cplay="stack" onclick="setChordPlayback('stack')">&#127927; Stack Only</button>
         <button class="dir-btn chord-play-btn" data-cplay="sing" onclick="setChordPlayback('sing')">&#127908; Sing</button>
         <button class="dir-btn chord-play-btn" data-cplay="call" onclick="setChordPlayback('call')">&#127929; Call &amp; Play</button>
+        <button class="dir-btn chord-play-btn" data-cplay="identify" onclick="setChordPlayback('identify')" title="Hear a chord, name it from the chord types selected above. No microphone needed.">&#127911; Identify</button>
       </div>
     </div>
 
@@ -415,6 +416,9 @@
     <div class="replay-hint answer-btn" id="answerBtn" style="display:none;" onclick="playAnswer()">🎹 Play Answer (hear the chord)</div>
     <div class="skip-hint" id="skipHint" title="Skip this assignment — it gets marked as a mistake for overlearning">Press <kbd>X</kbd> to skip (counts as mistake)</div>
     <div class="continue-hint" id="continueHint" style="display:none" title="Start listening for this assignment, or pause listening mid-round"></div>
+
+    <!-- Chord identify: one button per selected chord type -->
+    <div class="identify-grid" id="identifyGrid"></div>
 
     <div class="piano-wrap">
       <div class="piano" id="piano"></div>

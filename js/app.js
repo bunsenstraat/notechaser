@@ -67,6 +67,7 @@ function isInstrumentMode() { return (gameMode === 'instrument' || gameMode === 
 function isChordSing() { return gameMode === 'chord' && chordPlayback === 'sing'; }
 function isChordCall() { return gameMode === 'chord' && chordPlayback === 'call'; }
 function isChordVoiceMode() { return isChordSing() || isChordCall(); }
+function isChordIdentify() { return gameMode === 'chord' && chordPlayback === 'identify'; }
 function isScaleWide() { return gameMode === 'scale' && scaleRangeWide; }
 function isLickWide() { return gameMode === 'licks' && lickRangeWide; }
 function getRangeLow() { if (gameMode === 'bass') return BASS_RANGE_LOW; if (isChordSing()) return CHORD_SING_LOW; if (isScaleWide() || isLickWide()) return INST_RANGE_LOW; return isInstrumentMode() ? INST_RANGE_LOW : RANGE_LOW; }
@@ -128,6 +129,7 @@ function handleMidiMessage(msg) {
 function onMidiNoteChange() {
   if (!gameActive || melodyPlaying || !useMidi) return;
   if (!listenGateOpen()) return; // waiting for the player to start the assignment
+  if (isChordIdentify()) return;  // answers come from the buttons
 
   if (gameMode === 'chord') {
     // Chord mode: check if held notes match all target notes
@@ -271,9 +273,15 @@ function setInputMode(midi) {
   document.querySelectorAll('.input-mode-btn').forEach(b => {
     b.classList.toggle('selected', (b.dataset.input === 'midi') === midi);
   });
-  document.getElementById('micHint').textContent = midi
-    ? 'Connect a MIDI keyboard — or use the on-screen keyboard at the bottom'
-    : 'Microphone access required for pitch detection';
+  refreshInputHint();
+}
+
+function refreshInputHint() {
+  document.getElementById('micHint').textContent = isChordIdentify()
+    ? 'No microphone needed — listen, then pick the chord'
+    : useMidi
+      ? 'Connect a MIDI keyboard — or use the on-screen keyboard at the bottom'
+      : 'Microphone access required for pitch detection';
 }
 
 // ── STATE ──
@@ -537,7 +545,9 @@ function chordPreset(p) {
   if (p === 'all') {
     CHORD_TYPES.forEach((ct, i) => { selectedChords.add(i); btns[i].classList.add('selected'); });
   } else if (p !== 'none') {
-    CHORD_TYPES.forEach((ct, i) => { if (ct.cat === p) { selectedChords.add(i); btns[i].classList.add('selected'); } });
+    // Preset buttons are plural ('triads', '7ths'); the data's categories are not
+    const cat = { triads: 'triad', '7ths': '7th' }[p] || p;
+    CHORD_TYPES.forEach((ct, i) => { if (ct.cat === cat) { selectedChords.add(i); btns[i].classList.add('selected'); } });
   }
   updateStartBtn();
 }
@@ -840,6 +850,7 @@ function setMode(m) {
   document.getElementById('licksSetup').style.display = isLicks ? '' : 'none';
   document.getElementById('progressionSetup').style.display = isProgression ? '' : 'none';
   document.getElementById('targetSetup').style.display = isTarget ? '' : 'none';
+  refreshInputHint();
   document.querySelectorAll('.melody-only-setting').forEach(el => {
     el.style.display = isMelody ? '' : 'none';
   });
@@ -1149,6 +1160,9 @@ document.addEventListener('keydown', (e) => {
     // Useful in mic modes when you know you blew it but the timer hasn't run out.
     e.preventDefault();
     skipCurrentAssignment();
+  } else if (gameActive && isChordIdentify() && /^[1-9]$/.test(e.key)) {
+    const idx = identifyOrder[+e.key - 1];
+    if (idx !== undefined) { e.preventDefault(); answerIdentify(idx); }
   } else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && gameActive) {
     // Start the waiting assignment, or pause/resume listening mid-round
     e.preventDefault();
@@ -1554,6 +1568,7 @@ function chooseNextChord() {
   chordTargetNotes = new Set(currentChordType.intervals.map(s => chordRoot + s));
   chordHitNotes = new Set();
   holdingForMidi = null;
+  if (isChordIdentify()) resetIdentifyGrid();
   buildPiano(); // rebuild piano to fit this voicing
 }
 
@@ -1569,6 +1584,98 @@ function updateChordPiano(singingMidi, heldMidiNotes) {
     if (singingMidi !== null && m === singingMidi) k.classList.add('active-from'); // magenta = currently playing
     if (heldMidiNotes && heldMidiNotes.has(m)) k.classList.add('active-from'); // magenta = MIDI held
   });
+}
+
+// ── CHORD IDENTIFY ──
+// You hear a chord and name it from the types you selected — answers come
+// from buttons, not the mic. Roots are random, so two types with the same
+// interval shape are literally the same sound (Major 2nd, Min7 RL-A and
+// Guide 7/3/5 Minor are all 0-5-9 above their lowest note). Any of those
+// counts as right; marking one of them wrong would punish a correct ear.
+let identifyAnswered = false; // right answer given, next chord is coming
+let identifyHeard = false;    // the current chord has started sounding — the
+                              // next one is chosen ~1s before it plays, and a
+                              // tap in that gap must not grade an unheard chord
+let identifyOrder = [];       // selected chord-type indices, in button order
+let hiScoreChordId = parseInt(localStorage.getItem('notechaser_hi_chord_id') || '0');
+
+function chordShapeKey(ct) {
+  const lo = Math.min(...ct.intervals);
+  return ct.intervals.map(x => x - lo).sort((a, b) => a - b).join(',');
+}
+
+function identifyMatches(idx) {
+  return !!currentChordType && chordShapeKey(CHORD_TYPES[idx]) === chordShapeKey(currentChordType);
+}
+
+function buildIdentifyGrid() {
+  const grid = document.getElementById('identifyGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  identifyOrder = [...selectedChords].sort((a, b) => a - b);
+  identifyOrder.forEach((idx, n) => {
+    const ct = CHORD_TYPES[idx];
+    const btn = document.createElement('button');
+    btn.className = 'identify-btn';
+    btn.dataset.idx = idx;
+    const key = n < 9 ? `<span class="identify-key">${n + 1}</span>` : '';
+    btn.innerHTML = `${key}${ct.name}<span class="chord-label">${ct.short}</span>`;
+    btn.addEventListener('click', () => answerIdentify(idx));
+    grid.appendChild(btn);
+  });
+}
+
+function resetIdentifyGrid() {
+  identifyAnswered = false;
+  identifyHeard = false;
+  document.querySelectorAll('.identify-btn').forEach(b => {
+    b.classList.remove('wrong', 'correct', 'also', 'reveal');
+    b.disabled = false;
+  });
+  renderMasteryDisplay();
+}
+
+// Light every button that sounds like the current chord, and show the voicing
+function revealIdentify(chosenIdx, cls) {
+  identifyAnswered = true;
+  document.querySelectorAll('.identify-btn').forEach(b => {
+    const idx = +b.dataset.idx;
+    if (identifyMatches(idx)) b.classList.add(idx === chosenIdx ? cls : 'also');
+  });
+  chordHitNotes = new Set(chordTargetNotes);
+  chordTargetNotes = new Set();
+  updateChordPiano(null);
+  document.getElementById('noteTarget').textContent = currentChordType.short;
+  renderMasteryDisplay(); // safe to name it now
+}
+
+// Advance once the chord has finished sounding, so an early answer doesn't
+// start the next chord on top of the current one.
+function advanceIdentify(delay) {
+  const go = () => {
+    // Wait out the playback first: on the very first chord the game only
+    // goes active once it finishes
+    if (melodyPlaying) { setTimeout(go, 100); return; }
+    if (!gameActive || !isChordIdentify()) return;
+    onSuccess();
+  };
+  setTimeout(go, delay);
+}
+
+function answerIdentify(idx) {
+  // The game screen, not gameActive: the first chord plays before the game
+  // goes active, and an answer during it should count like any other
+  const onGameScreen = document.getElementById('game').classList.contains('active');
+  if (!onGameScreen || !isChordIdentify() || identifyAnswered || !identifyHeard) return;
+  if (!listenGateOpen()) armListening();
+  if (identifyMatches(idx)) {
+    revealIdentify(idx, 'correct');
+    advanceIdentify(900);
+  } else {
+    const btn = document.querySelector(`.identify-btn[data-idx="${idx}"]`);
+    if (btn) { btn.classList.add('wrong'); btn.disabled = true; }
+    markAssignmentMistake(); // keep guessing — but the round no longer counts
+  }
 }
 
 // ── PROGRESSION MODE HELPERS ──
@@ -1753,6 +1860,8 @@ function updateDisplay() {
   document.getElementById('hiScoreGame').textContent = `BEST: ${hiScore}`;
   // Hide answer button by default; chord mode will show it for sing
   document.getElementById('answerBtn').style.display = 'none';
+  setNoteBoxLabels('From', 'Sing');
+  document.getElementById('game').classList.toggle('identify-mode', isChordIdentify());
   // Refresh the overlearning mastery ticker for the current assignment
   renderMasteryDisplay();
   updateContinueHint();
@@ -1773,6 +1882,15 @@ function updateDisplay() {
       ? 'Press <kbd>SPACE</kbd> or tap here to replay chord'
       : 'Press <kbd>SPACE</kbd> or tap here to replay cadence';
     updateBassPiano(null);
+  } else if (gameMode === 'chord' && isChordIdentify()) {
+    document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreChordId}`;
+    document.getElementById('intervalDisplay').textContent = 'Which chord is this?';
+    setNoteBoxLabels('Choices', 'Answer');
+    document.getElementById('noteFrom').textContent = identifyOrder.length;
+    document.getElementById('noteTarget').textContent = identifyAnswered ? currentChordType.short : '?';
+    document.getElementById('arrowDir').innerHTML = '&#127911;';
+    document.getElementById('replayHint').innerHTML = 'Press <kbd>SPACE</kbd> or tap here to replay';
+    updateChordPiano(null);
   } else if (gameMode === 'chord') {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreChord}`;
     const remaining = chordTargetNotes.size;
@@ -1864,6 +1982,12 @@ function updateDisplay() {
   }
 }
 
+function setNoteBoxLabels(from, to) {
+  const labels = document.querySelectorAll('.note-box-label');
+  if (labels[0] && labels[0].textContent !== from) labels[0].textContent = from;
+  if (labels[1] && labels[1].textContent !== to) labels[1].textContent = to;
+}
+
 function updateTimeLabel() {
   const v = document.getElementById('timeSlider').value;
   document.getElementById('timeLabel').textContent = v + 's';
@@ -1881,6 +2005,7 @@ function setChordPlayback(mode) {
   document.querySelectorAll('.chord-play-btn').forEach(b => {
     b.classList.toggle('selected', b.dataset.cplay === mode);
   });
+  refreshInputHint();
   if (gameMode === 'chord') buildPiano();
 }
 
@@ -1903,6 +2028,22 @@ function playChordForMode(rootMidi, intervals, callback) {
         if (callback) callback();
       }
     });
+  } else if (chordPlayback === 'identify') {
+    // Block chord first — that's the sound being named — then broken up so
+    // the individual tones can be checked. Answering opens as it starts —
+    // a fast ear doesn't have to sit through the arpeggio.
+    melodyPlaying = true;
+    identifyHeard = true;
+    const notes = intervals.map(s => rootMidi + s);
+    const events = [{ notes, at: 0, dur: 1.3 }];
+    notes.forEach((m, i) => events.push({ notes: m, at: 1.5 + i * 0.28, dur: 0.9 }));
+    playSequence(events, {
+      totalDur: 1.5 + notes.length * 0.28 + 0.6,
+      onEnd: () => {
+        melodyPlaying = false;
+        if (callback) callback();
+      },
+    });
   } else if (chordPlayback === 'stack') {
     // Stack only — play all notes simultaneously
     melodyPlaying = true;
@@ -1922,7 +2063,9 @@ function playChordForMode(rootMidi, intervals, callback) {
 async function startGame() {
   TIMEOUT = parseInt(document.getElementById('timeSlider').value) * 1000;
 
-  if (useMidi) {
+  if (isChordIdentify()) {
+    initAudio(); // answers come from the buttons — nothing to listen to
+  } else if (useMidi) {
     const ok = await initMidi();
     if (!ok) return;
     midiHeldNotes.clear();
@@ -1990,6 +2133,7 @@ async function startGame() {
     currentChordType = null;
     chordRoundsOnRoot = 0;
     score = 0;
+    if (isChordIdentify()) buildIdentifyGrid();
     chooseNextChord(); // picks chord + places root around middle C + builds piano
     updateDisplay();
 
@@ -1999,9 +2143,10 @@ async function startGame() {
         roundStart = performance.now();
         gameLoop();
       };
-      if (chordPlayback === 'sing' || chordPlayback === 'call') {
+      if (chordPlayback === 'sing' || chordPlayback === 'call' || chordPlayback === 'identify') {
         // sing/call always calls playChordForMode — it handles the
-        // auto-play toggle for the root note internally, but still speaks
+        // auto-play toggle for the root note internally, but still speaks.
+        // Identify always plays: hearing the chord IS the assignment.
         playChordForMode(chordRoot, currentChordType.intervals, beginGame);
       } else if (AUTO_PLAY_INTRO) {
         speak(speechify(currentKeyDisplay), () => {
@@ -2237,6 +2382,12 @@ function gameLoop() {
   // Same while the on-screen keyboard is sounding — otherwise the mic hears it
   // and scores the keyboard instead of the singer.
   if (typeof playKeyboardMuting === 'function' && playKeyboardMuting()) {
+    animFrame = requestAnimationFrame(gameLoop);
+    return;
+  }
+
+  // Identify: answers come from the buttons, just keep the timer running
+  if (isChordIdentify()) {
     animFrame = requestAnimationFrame(gameLoop);
     return;
   }
@@ -2493,6 +2644,7 @@ function mistakeHoldCheck(roundedMidi, isTargetMatch, now) {
 
 function skipCurrentAssignment() {
   if (!gameActive || melodyPlaying) return;
+  if (isChordIdentify() && identifyAnswered) return; // already right, don't taint it
   // Mark the round tainted — onSuccess will commit as mistake and skip reward
   markAssignmentMistake();
 
@@ -2544,6 +2696,14 @@ function skipCurrentAssignment() {
     melodyIndex = melodyNotes.length - 1;
   }
 
+  // Identify: show what it was before moving on — that's the learning moment
+  if (isChordIdentify()) {
+    if (identifyAnswered) return;
+    revealIdentify(CHORD_TYPES.indexOf(currentChordType), 'reveal');
+    advanceIdentify(1400);
+    return;
+  }
+
   // Single-note modes (voice / instrument / chord) just advance via onSuccess
   onSuccess();
 }
@@ -2564,6 +2724,9 @@ function currentAssignmentInfo() {
       if (!currentChordType) return null;
       const idx = CHORD_TYPES.indexOf(currentChordType);
       if (idx < 0) return null;
+      if (isChordIdentify()) {
+        return { key: `chord-id:${idx}`, label: `${currentChordType.name} (by ear)`, mode: 'chord' };
+      }
       return { key: `chord:${idx}`, label: currentChordType.name, mode: 'chord' };
     }
     if (gameMode === 'progression') {
@@ -2642,6 +2805,8 @@ function renderMasteryDisplay() {
   if (!el) return;
   const info = currentAssignmentInfo();
   if (!info) { el.textContent = ''; el.style.display = 'none'; return; }
+  // Identify: the label IS the answer — and even the streak count hints at it
+  if (isChordIdentify() && !identifyAnswered) { el.textContent = ''; el.style.display = 'none'; return; }
   // Peek — don't auto-create a record just for display; show fresh defaults
   // if we haven't tracked this assignment before.
   const stats = progressPeek(info.key) || { currentStreak: 0, mistakes: 0, mastered: false };
@@ -2772,7 +2937,7 @@ function onSuccess() {
     const playNext = () => {
       // sing/call always call playChordForMode (it handles auto-play internally for the root)
       // arpeggio/stack only play when auto-play is on
-      if (chordPlayback === 'sing' || chordPlayback === 'call') {
+      if (chordPlayback === 'sing' || chordPlayback === 'call' || chordPlayback === 'identify') {
         playChordForMode(chordRoot, currentChordType.intervals, beginRound);
       } else if (AUTO_PLAY_INTRO) {
         playChordForMode(chordRoot, currentChordType.intervals, beginRound);
@@ -2782,7 +2947,7 @@ function onSuccess() {
     };
 
     setTimeout(() => {
-      if (rootChanged && chordPlayback !== 'sing' && chordPlayback !== 'call') {
+      if (rootChanged && chordPlayback !== 'sing' && chordPlayback !== 'call' && chordPlayback !== 'identify') {
         speak(speechify(currentKeyDisplay), playNext);
       } else {
         playNext();
@@ -3217,19 +3382,27 @@ function endGame() {
       bestEl.className = 'go-best';
     }
   } else if (gameMode === 'chord') {
-    const isNewBest = score > hiScoreChord;
+    // Naming a chord by ear and producing one are different skills — separate bests
+    const identify = isChordIdentify();
+    const prevBest = identify ? hiScoreChordId : hiScoreChord;
+    const isNewBest = score > prevBest;
     if (isNewBest) {
-      hiScoreChord = score;
-      localStorage.setItem('notechaser_hi_chord', hiScoreChord);
+      if (identify) {
+        hiScoreChordId = score;
+        localStorage.setItem('notechaser_hi_chord_id', hiScoreChordId);
+      } else {
+        hiScoreChord = score;
+        localStorage.setItem('notechaser_hi_chord', hiScoreChord);
+      }
     }
     document.getElementById('goScore').textContent = score;
-    document.getElementById('goScoreLabel').textContent = 'Chords Identified';
+    document.getElementById('goScoreLabel').textContent = identify ? 'Chords Named' : 'Chords Identified';
     const bestEl = document.getElementById('goBest');
     if (isNewBest && score > 0) {
       bestEl.textContent = 'NEW BEST!';
       bestEl.className = 'go-best go-new-best';
     } else {
-      bestEl.textContent = `BEST: ${hiScoreChord}`;
+      bestEl.textContent = `BEST: ${Math.max(prevBest, score)}`;
       bestEl.className = 'go-best';
     }
   } else if (gameMode === 'scale') {

@@ -239,7 +239,8 @@ function pkCurrentTargets() {
   if (typeof gameActive === 'undefined' || !gameActive) return [];
   const pick = (arr, i) => (Array.isArray(arr) && arr[i] !== undefined ? [arr[i]] : []);
   switch (gameMode) {
-    case 'chord': return [...chordTargetNotes];
+    // Identify: the voicing's register and span are themselves a hint
+    case 'chord': return isChordIdentify() ? [] : [...chordTargetNotes];
     case 'progression': return [...progTargetNotes];
     case 'bass': return pick(bassNotes, bassIndex);
     case 'licks': return pick(lickNotes, lickNoteIndex);
