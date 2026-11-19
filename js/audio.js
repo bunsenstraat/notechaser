@@ -223,6 +223,9 @@ function playNote(midi, duration = 2, when, levelScale = 1) {
     sendMidiNote(midi, start, duration);
     if (!midiOutBuiltin) return;
   }
+  // A loaded SoundFont replaces the built-in piano (falls through for any
+  // key the font doesn't cover)
+  if (typeof sf2Active === 'function' && sf2Active() && sf2Voice(midi, start, duration, NOTE_LEVEL * levelScale)) return;
   const buf = sampleBank.get(nearestAnchor(midi));
   if (buf) playSampledNote(midi, duration, start, NOTE_LEVEL * levelScale, buf);
   else playSynthNote(midi, duration, start, NOTE_LEVEL * 1.6 * levelScale);
@@ -331,10 +334,11 @@ function startVoice(midi) {
       return { startedAt: start, release() { midiNoteOffAt(midi, performance.now(), gen); } };
     }
   }
+  const fontVoice = typeof sf2Active === 'function' && sf2Active() ? sf2Voice(midi, start, undefined, VOICE_LEVEL) : null;
   const buf = sampleBank.get(nearestAnchor(midi));
-  const voice = buf
+  const voice = fontVoice || (buf
     ? playSampledNote(midi, 60, start, VOICE_LEVEL, buf)
-    : playSynthNote(midi, 8, start, VOICE_LEVEL * 1.6);
+    : playSynthNote(midi, 8, start, VOICE_LEVEL * 1.6));
   if (gen !== null) {
     const releaseBuiltin = voice.release;
     voice.release = t => { midiNoteOffAt(midi, performance.now(), gen); releaseBuiltin(t); };
