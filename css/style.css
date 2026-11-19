@@ -307,6 +307,14 @@ body::before {
   line-height: 1.4;
 }
 .setting-note:empty { display: none; }
+.sf2-status {
+  font-family: 'Chakra Petch', sans-serif;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#sf2RemoveBtn { margin-top: 6px; }
 .setting-note.warn { color: var(--yellow); }
 
 .setting-slider {

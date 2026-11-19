@@ -363,6 +363,22 @@
     </div>
 
     <div class="settings-group">
+      <div class="settings-group-title">Piano Sound</div>
+      <div class="setting-row">
+        <span class="setting-label">Sound</span>
+        <span class="setting-value sf2-status" id="sf2Status">Built-in piano</span>
+      </div>
+      <div class="setting-row" id="sf2PresetRow" style="display:none">
+        <span class="setting-label">Preset</span>
+        <select class="setting-select" id="sSf2Preset" onchange="onSf2PresetChosen(this)"></select>
+      </div>
+      <input type="file" id="sf2File" accept=".sf2" style="display:none" onchange="onSf2FileChosen(this)">
+      <button class="setting-find-btn" onclick="document.getElementById('sf2File').click()" title="Use your own .sf2 piano for every note the app plays. Read in the page, kept in this browser — never uploaded.">Load .sf2 SoundFont…</button>
+      <button class="setting-find-btn" id="sf2RemoveBtn" style="display:none" onclick="removeSoundFont()">Back to built-in piano</button>
+      <div class="setting-note" id="sf2Note"></div>
+    </div>
+
+    <div class="settings-group">
       <div class="settings-group-title">MIDI Out</div>
       <div class="setting-row" title="Send every note the app plays to an external synth or DAW. Turns MIDI keyboard input off — the two can't be on together.">
         <span class="setting-label">Device</span>
@@ -372,8 +388,8 @@
         <span class="setting-label">Channel</span>
         <select class="setting-select" id="sMidiOutChannel"></select>
       </div>
-      <div class="setting-row" title="Also play the app's own piano sound alongside the external synth">
-        <span class="setting-label">Built-in sound too</span>
+      <div class="setting-row" title="Also play the app's own piano (built-in, or your SoundFont) alongside the external synth">
+        <span class="setting-label">App's own sound too</span>
         <input type="checkbox" id="sMidiOutBuiltin">
       </div>
       <button class="setting-find-btn" id="midiOutFindBtn" onclick="findMidiOutDevices()">Find MIDI devices</button>
@@ -506,6 +522,7 @@
 
 <script src="js/data.js"></script>
 <script src="js/audio.js"></script>
+<script src="js/soundfont.js"></script>
 <script src="js/progress.js"></script>
 <script src="js/app.js"></script>
 <script src="js/keyboard.js"></script>
