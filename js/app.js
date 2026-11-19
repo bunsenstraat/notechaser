@@ -582,9 +582,11 @@ function chordPreset(p) {
   if (p === 'all') {
     CHORD_TYPES.forEach((ct, i) => { selectedChords.add(i); btns[i].classList.add('selected'); });
   } else if (p !== 'none') {
-    // Preset buttons are plural ('triads', '7ths'); the data's categories are not
+    // Preset buttons are plural ('triads', '7ths'); the data's categories are not.
+    // 'positions' takes all three of A, B and C.
     const cat = { triads: 'triad', '7ths': '7th' }[p] || p;
-    CHORD_TYPES.forEach((ct, i) => { if (ct.cat === cat) { selectedChords.add(i); btns[i].classList.add('selected'); } });
+    const match = ct => (cat === 'positions' ? ct.cat.startsWith('pos-') : ct.cat === cat);
+    CHORD_TYPES.forEach((ct, i) => { if (match(ct)) { selectedChords.add(i); btns[i].classList.add('selected'); } });
   }
   updateStartBtn();
 }

@@ -184,7 +184,7 @@ const CHORD_TYPES = [
   { name: 'Guide 7/3/13 Major',    short: '7/3/13',    intervals: iv('7 3 13'),         cat: 'guide' },
   { name: 'Guide 3/7/9 Minor',    short: '3/7/min',    intervals: iv('b3 b7 9'),      cat: 'guide' },
   { name: 'Guide 7/3/5 Minor',    short: '7/3/min',    intervals: iv('b7 b3 5'),           cat: 'guide' },
-  { name: 'Guide 3/7/9 Minor Major',    short: '3/7/minmaj',    intervals: iv('b3 b 9'),            cat: 'guide' },
+  { name: 'Guide 3/7/9 Minor Major',    short: '3/7/minmaj',    intervals: iv('b3 7 9'),            cat: 'guide' },
   { name: 'Guide half dim',    short: 'halfdim',    intervals: iv('b3 b5 b7 1'),            cat: 'guide' },
   // { name: 'Quartal 3',    short: 'Q3',     intervals: iv('1 4 b7'),         cat: 'quartal' },
   // { name: 'Quartal 4',    short: 'Q4',     intervals: iv('1 4 b7 b10'),     cat: 'quartal' },
@@ -426,3 +426,37 @@ function speechify(text) {
 }
 
 // MIDI note helpers: A4 = 69 = 440Hz
+
+// ── A / B / C POSITIONS (with root) ──
+// Every 7th chord — or its 6th version — voiced with the root in the bass:
+//   A = 1 3 5 7   (close)
+//   B = 1 7 3 5   (7th straight above the root, 3 and 5 an octave up)
+//   C = 1 5 7 3   (3rd on top, an octave up)
+// iv() stacks each degree above the one before, so the spellings below are
+// literally the voicings. Appended rather than inserted: CHORD_TYPES indices
+// are the keys of saved progress, and shifting them would scramble it.
+const POSITION_QUALITIES = [
+  { q: 'Maj7',      sp: 'Major 7',           t3: '3',  t5: '5',  t7: '7'  },
+  { q: 'Maj6',      sp: 'Major 6',           t3: '3',  t5: '5',  t7: '6'  },
+  { q: 'Dom7',      sp: 'Dominant 7',        t3: '3',  t5: '5',  t7: 'b7' },
+  { q: 'Min7',      sp: 'Minor 7',           t3: 'b3', t5: '5',  t7: 'b7' },
+  { q: 'Min6',      sp: 'Minor 6',           t3: 'b3', t5: '5',  t7: '6'  },
+  { q: 'Min(Maj7)', sp: 'Minor Major 7',     t3: 'b3', t5: '5',  t7: '7'  },
+  { q: 'Half-Dim7', sp: 'Half Diminished 7', t3: 'b3', t5: 'b5', t7: 'b7' },
+  { q: 'Dim7',      sp: 'Diminished 7',      t3: 'b3', t5: 'b5', t7: '6'  },
+  { q: 'Aug7',      sp: 'Augmented 7',       t3: '3',  t5: '#5', t7: 'b7' },
+];
+const POSITION_ORDER = {
+  A: ['t3', 't5', 't7'],
+  B: ['t7', 't3', 't5'],
+  C: ['t5', 't7', 't3'],
+};
+for (const pos of ['A', 'B', 'C']) {
+  for (const pq of POSITION_QUALITIES) {
+    const spelling = ['1', ...POSITION_ORDER[pos].map(k => pq[k])].join(' ');
+    const name = `${pq.q} Pos ${pos}`;
+    CHORD_TYPES.push({ name, short: spelling, intervals: iv(spelling), cat: `pos-${pos}` });
+    SPEECH_MAP[name] = `${pq.sp}, ${pos} position`;
+  }
+}
+
