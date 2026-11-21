@@ -716,6 +716,42 @@ function setLickFeel(feel) {
   });
 }
 
+// ── ARPEGGIO SPEED ──
+// Seconds between the notes of a broken chord, shared by every chord
+// arpeggio: chord playback, Identify, and Play Answer (which runs a bit
+// slower than the rest, as it always has). Saved in this browser.
+const ARP_DEFAULT = 0.25;
+let arpSpacing = (() => {
+  try {
+    const v = parseFloat(localStorage.getItem('notechaser_arp_spacing'));
+    if (v >= 0.15 && v <= 1.2) return v;
+  } catch (e) {}
+  return ARP_DEFAULT;
+})();
+
+// Each note rings long enough to run into the next, so a slow arpeggio still
+// sounds like one chord rather than a row of separate plucks
+function arpNoteDur(min) { return Math.max(min, arpSpacing * 2.2); }
+
+// Compact, like the Time per Note label: seconds between arpeggio notes
+function arpSpeedLabel(v) {
+  return `${v.toFixed(2)}s`;
+}
+
+function setArpSpacing(value) {
+  arpSpacing = Math.max(0.15, Math.min(1.2, parseFloat(value) || ARP_DEFAULT));
+  try { localStorage.setItem('notechaser_arp_spacing', String(arpSpacing)); } catch (e) {}
+  document.getElementById('arpSpeedLabel').textContent = arpSpeedLabel(arpSpacing);
+}
+
+// Hear the speed you just picked: a Cmaj7 broken chord. Plain playSequence,
+// not playChord, so it can never touch a game's melodyPlaying state.
+function previewArpSpeed() {
+  initAudio();
+  const notes = [60, 64, 67, 71];
+  playSequence(notes.map((m, i) => ({ notes: m, at: i * arpSpacing, dur: arpNoteDur(1.2) })));
+}
+
 function updateLickTempoLabel() {
   lickBPM = parseInt(document.getElementById('lickTempoSlider').value);
   document.getElementById('lickTempoLabel').textContent = lickBPM + ' BPM';
@@ -1127,8 +1163,8 @@ function playAnswer() {
   melodyPlaying = true;
   // Play all chord tones as arpeggio so the user can hear each note, then
   // stack them together
-  const spacing = 0.4;
-  const events = notes.map((midi, i) => ({ notes: midi, at: i * spacing, dur: 0.6 }));
+  const spacing = arpSpacing * 1.6; // 0.4 s at the default speed, as before
+  const events = notes.map((midi, i) => ({ notes: midi, at: i * spacing, dur: arpNoteDur(0.6) }));
   const stackAt = notes.length * spacing + 0.3;
   events.push({ notes: [...notes], at: stackAt, dur: 1.2 });
 
@@ -1362,8 +1398,8 @@ function announceScale(rootMidi, scaleName, callback) {
 
 function playChord(rootMidi, chordIntervals, callback) {
   melodyPlaying = true;
-  const arpeggioSpacing = 0.25; // seconds
-  const holdDuration = 1.2;
+  const arpeggioSpacing = arpSpacing; // seconds — set by the Arpeggio Speed slider
+  const holdDuration = arpNoteDur(1.2);
 
   // Arpeggio up, then the whole voicing stacked
   const events = chordIntervals.map((semitones, i) => ({
@@ -2075,9 +2111,9 @@ function playChordForMode(rootMidi, intervals, callback) {
     identifyHeard = true;
     const notes = intervals.map(s => rootMidi + s);
     const events = [{ notes, at: 0, dur: 1.3 }];
-    notes.forEach((m, i) => events.push({ notes: m, at: 1.5 + i * 0.28, dur: 0.9 }));
+    notes.forEach((m, i) => events.push({ notes: m, at: 1.5 + i * arpSpacing, dur: arpNoteDur(0.9) }));
     playSequence(events, {
-      totalDur: 1.5 + notes.length * 0.28 + 0.6,
+      totalDur: 1.5 + notes.length * arpSpacing + Math.max(0.6, arpSpacing),
       onEnd: () => {
         melodyPlaying = false;
         if (callback) callback();
@@ -3885,6 +3921,10 @@ function resetSettings() {
   const saved = JSON.parse(localStorage.getItem('notechaser_settings') || 'null');
   if (saved) applySettings(saved);
 })();
+
+// Arpeggio speed slider shows the saved speed
+document.getElementById('arpSpeedSlider').value = arpSpacing;
+document.getElementById('arpSpeedLabel').textContent = arpSpeedLabel(arpSpacing);
 
 // Prevent start with nothing selected
 updateStartBtn();
