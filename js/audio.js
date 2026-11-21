@@ -501,8 +501,14 @@ window.addEventListener('pagehide', () => midiPanic());
 // Audio is handed to the clock immediately; the visual callbacks ride along
 // on the same clock instead of on setTimeout, so highlights track what you
 // actually hear.
+// Quitting a game cancels every sequence in flight: no more onNote/onEnd
+// callbacks, so a chained intro can't carry on into the menu
+let seqEpoch = 0;
+function cancelSequences() { seqEpoch++; }
+
 function playSequence(events, opts = {}) {
   initAudio();
+  const epoch = seqEpoch;
   const lead = opts.lead === undefined ? 0.08 : opts.lead;
   const t0 = audioCtx.currentTime + lead;
   let last = 0;
@@ -521,7 +527,7 @@ function playSequence(events, opts = {}) {
   let cancelled = false;
 
   const tick = () => {
-    if (cancelled) return;
+    if (cancelled || epoch !== seqEpoch) return;
     const now = audioCtx.currentTime;
     while (i < events.length && now >= t0 + events[i].at - 0.015) {
       if (opts.onNote) opts.onNote(events[i], i);
