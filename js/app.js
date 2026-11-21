@@ -444,6 +444,18 @@ let roundStart = 0;
 let animFrame = null;
 let pitchBuffer = new Float32Array(2048);
 
+// ── GAME SESSION ──
+// A game is a chain of timers, speech callbacks and note sequences. Leaving
+// one mid-flight (Back to menu) bumps the epoch: every pending continuation
+// from the old game checks it and quietly does nothing, so an intro can't
+// carry on playing — or start a round — on the menu screen.
+let gameEpoch = 0;
+
+function later(fn, ms) {
+  const epoch = gameEpoch;
+  return setTimeout(() => { if (epoch === gameEpoch) fn(); }, ms);
+}
+
 // ── LISTEN GATE ──
 // While the gate is shut the mic is ignored and the round clock is frozen.
 // Two ways it shuts: MANUAL_ADVANCE closes it after every success (so the next
@@ -1196,7 +1208,7 @@ function replayBaseNote() {
     const scale = SCALES[currentScaleForSing];
     announceScale(scaleRoot, scale.name, () => {
       playNote(scaleRoot, 0.8);
-      setTimeout(() => { roundStart = performance.now(); }, 1000);
+      later(() => { roundStart = performance.now(); }, 1000);
     });
   } else if (gameMode === 'licks') {
     playLick(lickNotes, () => {
@@ -1206,7 +1218,7 @@ function replayBaseNote() {
   } else if (gameMode === 'progression') {
     // Replay: play root note of current chord
     playNote(progCurrentRoot, 1.0);
-    setTimeout(() => { roundStart = performance.now(); }, 1200);
+    later(() => { roundStart = performance.now(); }, 1200);
   } else if (gameMode === 'melody') {
     playMelody(melodyNotes, () => {
       updateDisplay();
@@ -1217,12 +1229,12 @@ function replayBaseNote() {
     const t = targetSequence[targetSeqIndex];
     if (t) {
       playNote(t.midi, 0.8);
-      setTimeout(() => { roundStart = performance.now(); }, 900);
+      later(() => { roundStart = performance.now(); }, 900);
     }
   } else {
     playNote(currentBaseMidi, 0.6);
     if (gameMode === 'instrument') {
-      setTimeout(() => playNote(currentTargetMidi, 0.6), 500);
+      later(() => playNote(currentTargetMidi, 0.6), 500);
     }
   }
 }
@@ -1238,6 +1250,9 @@ document.addEventListener('keydown', (e) => {
   } else if (gameActive && isChordIdentify() && /^[1-9]$/.test(e.key)) {
     const idx = identifyOrder[+e.key - 1];
     if (idx !== undefined) { e.preventDefault(); answerIdentify(idx); }
+  } else if (e.key === 'Escape' && document.getElementById('game').classList.contains('active')) {
+    e.preventDefault();
+    quitToMenu();
   } else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && gameActive) {
     // Start the waiting assignment, or pause/resume listening mid-round
     e.preventDefault();
@@ -1357,9 +1372,10 @@ function detectPitch() {
 function speak(text, callback) {
   // If voice announcements are disabled, skip speech entirely
   if (!ANNOUNCE_VOICE) {
-    if (callback) setTimeout(callback, 50);
+    if (callback) later(callback, 50);
     return;
   }
+  const epoch = gameEpoch;
   // Cancel any queued speech to avoid pile-ups
   speechSynthesis.cancel();
 
@@ -1378,8 +1394,8 @@ function speak(text, callback) {
   const finish = () => {
     if (done) return;
     done = true;
-    unduckAudio(); // restore music volume
-    if (callback) callback();
+    unduckAudio(); // restore music volume — even if the game was left meanwhile
+    if (callback && epoch === gameEpoch) callback();
   };
 
   utter.onend = finish;
@@ -1388,7 +1404,7 @@ function speak(text, callback) {
 
   // Fallback: if onend/onerror never fire (common on mobile)
   const estimatedMs = Math.max(1500, text.length * 100);
-  setTimeout(finish, estimatedMs);
+  setTimeout(finish, estimatedMs); // always runs: it un-ducks the mix
 }
 
 function announceScale(rootMidi, scaleName, callback) {
@@ -1730,11 +1746,11 @@ function advanceIdentify(delay) {
   const go = () => {
     // Wait out the playback first: on the very first chord the game only
     // goes active once it finishes
-    if (melodyPlaying) { setTimeout(go, 100); return; }
+    if (melodyPlaying) { later(go, 100); return; }
     if (!gameActive || !isChordIdentify()) return;
     onSuccess();
   };
-  setTimeout(go, delay);
+  later(go, delay);
 }
 
 function answerIdentify(idx) {
@@ -1851,6 +1867,7 @@ function showScreen(id) {
   const progressBtn = document.getElementById('progressBtn');
   if (progressBtn) progressBtn.style.display = id === 'setup' ? '' : 'none';
   document.getElementById(id).classList.add('active');
+  disarmGameBack();
   // The playable keyboard dock only rides along with the game screen
   if (typeof pkOnScreenChange === 'function') pkOnScreenChange(id);
 }
@@ -2094,7 +2111,7 @@ function playChordForMode(rootMidi, intervals, callback) {
     speak(chordLabel, () => {
       if (AUTO_PLAY_INTRO) {
         playNote(rootMidi, 1.0);
-        setTimeout(() => {
+        later(() => {
           melodyPlaying = false;
           if (callback) callback();
         }, 1200);
@@ -2136,6 +2153,7 @@ function playChordForMode(rootMidi, intervals, callback) {
 }
 
 async function startGame() {
+  gameEpoch++; // nothing left over from a previous game can fire into this one
   TIMEOUT = parseInt(document.getElementById('timeSlider').value) * 1000;
   inputHintNotice = '';
   // Rebind MIDI out if the device was plugged in after the page loaded
@@ -2197,7 +2215,7 @@ async function startGame() {
       }
     };
 
-    setTimeout(() => {
+    later(() => {
       if (bassAnnounceKey) {
         const isMinor = currentCadence.cat === 'minor' || currentCadence.name === 'Im7';
         announceBassKey(bassKeyRoot, isMinor, startListening);
@@ -2215,7 +2233,7 @@ async function startGame() {
     chooseNextChord(); // picks chord + places root around middle C + builds piano
     updateDisplay();
 
-    setTimeout(() => {
+    later(() => {
       const beginGame = () => {
         gameActive = true;
         roundStart = performance.now();
@@ -2246,7 +2264,7 @@ async function startGame() {
     buildPiano();
     updateDisplay();
 
-    setTimeout(() => {
+    later(() => {
       // Announce progression name and key
       speak(`${speechify(currentProgression.name)}, in ${speechify(currentKeyDisplay)}`, () => {
         const beginGame = () => {
@@ -2256,7 +2274,7 @@ async function startGame() {
         };
         if (AUTO_PLAY_INTRO) {
           playNote(progCurrentRoot, 1.0);
-          setTimeout(beginGame, 1200);
+          later(beginGame, 1200);
         } else {
           beginGame();
         }
@@ -2275,7 +2293,7 @@ async function startGame() {
     buildPiano();
     updateDisplay();
 
-    setTimeout(() => {
+    later(() => {
       announceScale(scaleRoot, scale.name, () => {
         const beginGame = () => {
           gameActive = true;
@@ -2284,7 +2302,7 @@ async function startGame() {
         };
         if (AUTO_PLAY_INTRO) {
           playNote(scaleRoot, 0.8);
-          setTimeout(beginGame, 1000);
+          later(beginGame, 1000);
         } else {
           beginGame();
         }
@@ -2305,7 +2323,7 @@ async function startGame() {
     buildPiano();
     updateDisplay();
 
-    setTimeout(() => {
+    later(() => {
       speak(`${currentLick.name}, in ${speechify(currentKeyDisplay)}`, () => {
         const beginGame = () => {
           updateDisplay();
@@ -2327,7 +2345,7 @@ async function startGame() {
     buildPiano();
     updateDisplay();
 
-    setTimeout(() => {
+    later(() => {
       const beginGame = () => {
         gameActive = true;
         roundStart = performance.now();
@@ -2341,7 +2359,7 @@ async function startGame() {
       speak(`${speechify(rootName)} ${targetQuality}`, () => {
         if (AUTO_PLAY_INTRO) {
           playNote(first.midi, 0.8);
-          setTimeout(beginGame, 1000);
+          later(beginGame, 1000);
         } else {
           beginGame();
         }
@@ -2377,7 +2395,7 @@ async function startGame() {
       }
     };
 
-    setTimeout(() => {
+    later(() => {
       if (gameMode === 'harmonic') {
         // Announce scale name, then play chord, then start
         announceScale(harmonicRoot, SCALES[selectedScale].name, () => {
@@ -2405,10 +2423,10 @@ async function startGame() {
 
     // Play notes
     if (AUTO_PLAY_INTRO) {
-      setTimeout(() => {
+      later(() => {
         playNote(currentBaseMidi);
         if (gameMode === 'instrument') {
-          setTimeout(() => playNote(currentTargetMidi), 500);
+          later(() => playNote(currentTargetMidi), 500);
         }
       }, 300);
     }
@@ -2971,7 +2989,7 @@ function onSuccess() {
       }
     };
 
-    setTimeout(() => {
+    later(() => {
       if (bassAnnounceKey) {
         const isMinor = currentCadence.cat === 'minor' || currentCadence.name === 'Im7';
         announceBassKey(bassKeyRoot, isMinor, playNext);
@@ -3024,7 +3042,7 @@ function onSuccess() {
       }
     };
 
-    setTimeout(() => {
+    later(() => {
       if (rootChanged && chordPlayback !== 'sing' && chordPlayback !== 'call' && chordPlayback !== 'identify') {
         speak(speechify(currentKeyDisplay), playNext);
       } else {
@@ -3060,7 +3078,7 @@ function onSuccess() {
 
     document.getElementById('intervalDisplay').textContent = `✓ Progression ${score}!`;
 
-    setTimeout(() => {
+    later(() => {
       speak(`${speechify(currentProgression.name)}, in ${speechify(currentKeyDisplay)}`, () => {
         const beginRound = () => {
           updateDisplay();
@@ -3069,7 +3087,7 @@ function onSuccess() {
         };
         if (AUTO_PLAY_INTRO) {
           playNote(progCurrentRoot, 1.0);
-          setTimeout(beginRound, 1200);
+          later(beginRound, 1200);
         } else {
           beginRound();
         }
@@ -3122,7 +3140,7 @@ function onSuccess() {
 
       document.getElementById('intervalDisplay').textContent = `✓ Lick ${score}!`;
 
-      setTimeout(() => {
+      later(() => {
         speak(`${currentLick.name}, in ${speechify(currentKeyDisplay)}`, () => {
           const beginRound = () => {
             updateDisplay();
@@ -3176,7 +3194,7 @@ function onSuccess() {
 
       document.getElementById('intervalDisplay').textContent = `✓ Scale ${score}!`;
 
-      setTimeout(() => {
+      later(() => {
         announceScale(scaleRoot, scale.name, () => {
           const beginRound = () => {
             updateDisplay();
@@ -3185,7 +3203,7 @@ function onSuccess() {
           };
           if (AUTO_PLAY_INTRO) {
             playNote(scaleRoot, 0.8);
-            setTimeout(beginRound, 1000);
+            later(beginRound, 1000);
           } else {
             beginRound();
           }
@@ -3240,7 +3258,7 @@ function onSuccess() {
       currentKeyDisplay = jazzNoteName(rootPc);
 
       document.getElementById('intervalDisplay').textContent = `✓ Round ${score}!`;
-      setTimeout(() => {
+      later(() => {
         const beginRound = () => {
           updateDisplay();
           roundStart = performance.now();
@@ -3249,7 +3267,7 @@ function onSuccess() {
         speak(`${speechify(currentKeyDisplay)} ${targetQuality}`, () => {
           if (AUTO_PLAY_INTRO) {
             playNote(firstCard.midi, 0.8);
-            setTimeout(beginRound, 1000);
+            later(beginRound, 1000);
           } else {
             beginRound();
           }
@@ -3278,7 +3296,7 @@ function onSuccess() {
         } else {
           // Announcements off — still leave a beat to see the new card. No cue
           // sound: the pivot is meant to be carried over, not handed back.
-          setTimeout(beginCard, 700);
+          later(beginCard, 700);
         }
       } else {
         updateDisplay();
@@ -3331,7 +3349,7 @@ function onSuccess() {
       document.getElementById('streakDots').innerHTML = '';
 
       // Play chord (harmonic) + melody after a brief pause
-      setTimeout(() => {
+      later(() => {
         const beginRound = () => {
           updateDisplay();
           roundStart = performance.now();
@@ -3411,12 +3429,12 @@ function onSuccess() {
   beginAssignmentAttempt(); // fresh attempt for the next interval
 
   // Short delay so player can see the revealed interval in instrument mode
-  setTimeout(() => {
+  later(() => {
     updateDisplay();
     if (AUTO_PLAY_INTRO) {
       playNote(currentBaseMidi);
       if (gameMode === 'instrument') {
-        setTimeout(() => playNote(currentTargetMidi), 500);
+        later(() => playNote(currentTargetMidi), 500);
       }
     }
   }, gameMode === 'instrument' ? 800 : 200);
@@ -3425,11 +3443,14 @@ function onSuccess() {
   animFrame = requestAnimationFrame(gameLoop);
 }
 
-function endGame() {
+// quit = leaving via Back to menu: no fail sound, no game-over screen, and an
+// unfinished round isn't charged as a mistake — unless you'd already made one
+// in it. A streak that beats your best still counts.
+function endGame(quit) {
   // If the player was mid-attempt, record the timeout as a mistake on the
   // current assignment. This only fires once because commitAssignmentResult
   // uses currentAssignmentInfo() which returns null if state is cleared.
-  if (gameActive) {
+  if (gameActive && (!quit || currentRoundHasMistake)) {
     commitAssignmentResult(true);
   }
 
@@ -3441,7 +3462,7 @@ function endGame() {
   if (animFrame) cancelAnimationFrame(animFrame);
   stopMic();
 
-  playFailSound();
+  if (!quit) playFailSound();
 
   if (gameMode === 'bass') {
     const isNewBest = score > hiScoreBass;
@@ -3593,7 +3614,42 @@ function endGame() {
     }
   }
 
-  showScreen('gameover');
+  showScreen(quit ? 'setup' : 'gameover');
+}
+
+// The Menu button: with a streak going, the first tap only arms it, so a
+// stray thumb can't end a good run. Esc on a keyboard quits straight away.
+let gameBackTimer = null;
+
+function onGameBack() {
+  const btn = document.getElementById('gameBackBtn');
+  if (score > 0 && !btn.classList.contains('armed')) {
+    btn.classList.add('armed');
+    btn.textContent = 'Tap again to quit';
+    clearTimeout(gameBackTimer);
+    gameBackTimer = setTimeout(disarmGameBack, 2500);
+    return;
+  }
+  quitToMenu();
+}
+
+function disarmGameBack() {
+  clearTimeout(gameBackTimer);
+  const btn = document.getElementById('gameBackBtn');
+  if (!btn) return;
+  btn.classList.remove('armed');
+  btn.innerHTML = '&#9664; Menu';
+}
+
+// Back to the menu from a running game, with every setup choice as it was
+function quitToMenu() {
+  if (!document.getElementById('game').classList.contains('active')) return;
+  gameEpoch++;          // kill pending timers and speech callbacks of this game
+  cancelSequences();    // and any melody/chord still being scheduled
+  try { speechSynthesis.cancel(); } catch (e) {}
+  stopAllVoices();      // silence what's ringing (all-notes-off on MIDI out too)
+  midiHeldNotes.clear();
+  endGame(true);
 }
 
 function retryGame() {

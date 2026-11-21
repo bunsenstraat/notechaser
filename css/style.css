@@ -692,6 +692,26 @@ body::before {
   color: var(--text-dim);
 }
 
+/* Back to menu — a second tap is asked for when there's a streak to lose */
+.game-back {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.8rem;
+  padding: 8px 14px;
+  min-height: 36px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.game-back:hover { color: var(--cyan); border-color: var(--cyan-dim); }
+.game-back.armed {
+  color: var(--yellow);
+  border-color: #ffcc0066;
+}
+
 .timer-bar-wrap {
   height: 4px;
   background: var(--surface2);
