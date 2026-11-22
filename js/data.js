@@ -646,7 +646,7 @@ CADENCES.push(
     ]
   },
   {
-    name: 'ii-V to IV', short: 'v⁷→I⁷→IV△', cat: 'major',
+    name: 'ii-V of IV', short: 'v⁷→I⁷→IV△', cat: 'major',
     chords: [
       { degRoot: 7,  name: 'v-7',    quality: 'm7' },
       { degRoot: 0,  name: 'I7',     quality: '7' },
@@ -671,11 +671,71 @@ CADENCES.push(
   },
 );
 
+// Secondary ii-Vs: the ii-V of another chord in the key, numbered in the
+// home key. A minor target gets the minor ii-V (half-diminished ii, altered
+// V); the borrowed ones come from the parallel minor.
+CADENCES.push(
+  {
+    name: 'ii-V of ii', short: 'iiiø→VI⁷alt→ii⁷', cat: 'major',
+    chords: [
+      { degRoot: 4,  name: 'iiiø7',   quality: 'm7b5' },
+      { degRoot: 9,  name: 'VI7alt',  quality: '7alt' },
+      { degRoot: 2,  name: 'ii-7',    quality: 'm7' },
+    ]
+  },
+  {
+    name: 'ii-V of iii', short: '♯ivø→VII⁷alt→iii⁷', cat: 'major',
+    chords: [
+      { degRoot: 6,  name: '♯ivø7',   quality: 'm7b5' },
+      { degRoot: 11, name: 'VII7alt', quality: '7alt' },
+      { degRoot: 4,  name: 'iii-7',   quality: 'm7' },
+    ]
+  },
+  {
+    name: 'ii-V of V', short: 'vi⁷→II⁷→V⁷', cat: 'major',
+    chords: [
+      { degRoot: 9,  name: 'vi-7',    quality: 'm7' },
+      { degRoot: 2,  name: 'II7',     quality: '7' },
+      { degRoot: 7,  name: 'V7',      quality: '7' },
+    ]
+  },
+  {
+    name: 'ii-V of vi', short: 'viiø→III⁷alt→vi⁷', cat: 'major',
+    chords: [
+      { degRoot: 11, name: 'viiø7',   quality: 'm7b5' },
+      { degRoot: 4,  name: 'III7alt', quality: '7alt' },
+      { degRoot: 9,  name: 'vi-7',    quality: 'm7' },
+    ]
+  },
+  {
+    name: 'Minor ii-V of IV', short: 'vø→I⁷alt→IV△', cat: 'major',
+    chords: [
+      { degRoot: 7,  name: 'vø7',     quality: 'm7b5' },
+      { degRoot: 0,  name: 'I7alt',   quality: '7alt' },
+      { degRoot: 5,  name: 'IVMaj7',  quality: 'Maj7' },
+    ]
+  },
+  {
+    name: 'ii-V of ♭VI', short: '♭vii⁷→♭III⁷→♭VI△', cat: 'major',
+    chords: [
+      { degRoot: 10, name: '♭vii-7',  quality: 'm7' },
+      { degRoot: 3,  name: '♭III7',   quality: '7' },
+      { degRoot: 8,  name: '♭VIMaj7', quality: 'Maj7' },
+    ]
+  },
+);
+
+Object.assign(SPEECH_MAP, {
+  'ii-V of ii': 'two five of two', 'ii-V of iii': 'two five of three',
+  'ii-V of V': 'two five of five', 'ii-V of vi': 'two five of six',
+  'Minor ii-V of IV': 'minor two five of four', 'ii-V of ♭VI': 'two five of flat six',
+});
+
 Object.assign(SPEECH_MAP, {
   'Rhythm changes bridge': 'rhythm changes bridge', 'Dominant cycle': 'dominant cycle',
   'Autumn cycle': 'autumn leaves cycle', 'Descending ii-Vs': 'descending two fives',
   'Coltrane changes': 'Coltrane changes', 'Lady Bird turnaround': 'lady bird turnaround', 'Dameron turnaround': 'Tadd Dameron turnaround',
-  'Chromatic turnaround': 'chromatic turnaround', 'ii-V to IV': 'two five to four',
+  'Chromatic turnaround': 'chromatic turnaround', 'ii-V of IV': 'two five of four',
   'Minor ii-V to major': 'minor two five to major', 'Minor iv-V-i': 'minor four five one',
 });
 
