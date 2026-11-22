@@ -455,7 +455,10 @@ for (const pos of ['A', 'B', 'C']) {
   for (const pq of POSITION_QUALITIES) {
     const spelling = ['1', ...POSITION_ORDER[pos].map(k => pq[k])].join(' ');
     const name = `${pq.q} Pos ${pos}`;
-    CHORD_TYPES.push({ name, short: spelling, intervals: iv(spelling), cat: `pos-${pos}` });
+    CHORD_TYPES.push({
+      name, short: spelling, intervals: iv(spelling), cat: `pos-${pos}`,
+      pos, quality: pq.q, qualitySpoken: pq.sp,   // for Identify's "answer by position / quality"
+    });
     SPEECH_MAP[name] = `${pq.sp}, ${pos} position`;
   }
 }

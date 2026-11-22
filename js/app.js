@@ -1015,7 +1015,15 @@ function updateStartBtn() {
   if (gameMode === 'harmonic') {
     document.getElementById('startBtn').disabled = selectedScale === null;
   } else if (gameMode === 'chord') {
-    document.getElementById('startBtn').disabled = selectedChords.size === 0;
+    // Answering by position/quality plays only A/B/C position chords
+    document.getElementById('startBtn').disabled = identifyPlayable().length === 0;
+    const note = document.getElementById('identifyByNote');
+    if (note) {
+      const needPos = isChordIdentify() && identifyAnswerBy !== 'type';
+      note.textContent = needPos
+        ? (identifyPlayable().length ? `Plays only the ${identifyPlayable().length} A/B/C position chords you've selected.` : 'Select some A/B/C position chords (the A pos / B pos / C pos presets).')
+        : '';
+    }
   } else if (gameMode === 'bass') {
     document.getElementById('startBtn').disabled = selectedCadences.size === 0;
   } else if (gameMode === 'scale') {
@@ -1644,7 +1652,7 @@ function chordFitsRoot(chordType, root) {
 }
 
 function chooseNextChord() {
-  const indices = [...selectedChords];
+  const indices = identifyPlayable();
   let candidates = indices;
   if (indices.length > 1 && currentChordType) {
     const lastIdx = CHORD_TYPES.indexOf(currentChordType);
@@ -1776,29 +1784,74 @@ let identifyHeard = false;    // the current chord has started sounding — the
                               // tap in that gap must not grade an unheard chord
 let identifyOrder = [];       // selected chord-type indices, in button order
 let hiScoreChordId = parseInt(localStorage.getItem('notechaser_hi_chord_id') || '0');
+// Separate bests per Identify answer mode — naming a position is a different skill
+const ID_BEST_KEY = { type: 'notechaser_hi_chord_id', position: 'notechaser_hi_chord_pos', quality: 'notechaser_hi_chord_qual' };
+function identifyBest() { return parseInt(localStorage.getItem(ID_BEST_KEY[identifyAnswerBy]) || '0'); }
 
 function chordShapeKey(ct) {
   const lo = Math.min(...ct.intervals);
   return ct.intervals.map(x => x - lo).sort((a, b) => a - b).join(',');
 }
 
-function identifyMatches(idx) {
-  return !!currentChordType && chordShapeKey(CHORD_TYPES[idx]) === chordShapeKey(currentChordType);
+// What the answer buttons name:
+//   'type'     — the chord type (any selected chord)
+//   'position' — A / B / C only; you're told the quality
+//   'quality'  — the quality only, positions mixed
+// The last two play only the A/B/C position chords in the selection.
+let identifyAnswerBy = 'type';
+
+const POSITION_SPELLING = { A: '1 3 5 7', B: '1 7 3 5', C: '1 5 7 3' };
+
+function setIdentifyAnswerBy(mode) {
+  identifyAnswerBy = mode;
+  document.querySelectorAll('.identify-by-btn').forEach(b => b.classList.toggle('selected', b.dataset.idby === mode));
+  updateStartBtn();
+}
+
+// Chord indices the game may play: everything selected, or — when answering
+// by position or quality — only the selected A/B/C position chords
+function identifyPlayable() {
+  const sel = [...selectedChords];
+  if (!isChordIdentify() || identifyAnswerBy === 'type') return sel;
+  return sel.filter(i => CHORD_TYPES[i].pos);
+}
+
+// answer: a chord index (as string or number), a position letter, or a quality
+function identifyMatches(answer) {
+  if (!currentChordType) return false;
+  if (identifyAnswerBy === 'position') return String(answer) === currentChordType.pos;
+  if (identifyAnswerBy === 'quality') return String(answer) === currentChordType.quality;
+  return chordShapeKey(CHORD_TYPES[+answer]) === chordShapeKey(currentChordType);
 }
 
 function buildIdentifyGrid() {
   const grid = document.getElementById('identifyGrid');
   if (!grid) return;
   grid.innerHTML = '';
-  identifyOrder = [...selectedChords].sort((a, b) => a - b);
-  identifyOrder.forEach((idx, n) => {
-    const ct = CHORD_TYPES[idx];
+  const playable = identifyPlayable().sort((a, b) => a - b);
+  let answers; // [{ answer, label, sub }]
+  if (identifyAnswerBy === 'position') {
+    const present = new Set(playable.map(i => CHORD_TYPES[i].pos));
+    answers = ['A', 'B', 'C'].filter(p => present.has(p))
+      .map(p => ({ answer: p, label: `${p} position`, sub: POSITION_SPELLING[p] }));
+  } else if (identifyAnswerBy === 'quality') {
+    const seen = new Map();
+    for (const i of playable) {
+      const ct = CHORD_TYPES[i];
+      if (!seen.has(ct.quality)) seen.set(ct.quality, ct.qualitySpoken || '');
+    }
+    answers = [...seen].map(([q, sp]) => ({ answer: q, label: q, sub: sp }));
+  } else {
+    answers = playable.map(i => ({ answer: String(i), label: CHORD_TYPES[i].name, sub: CHORD_TYPES[i].short }));
+  }
+  identifyOrder = answers.map(a => a.answer);
+  answers.forEach((a, n) => {
     const btn = document.createElement('button');
     btn.className = 'identify-btn';
-    btn.dataset.idx = idx;
+    btn.dataset.answer = a.answer;
     const key = n < 9 ? `<span class="identify-key">${n + 1}</span>` : '';
-    btn.innerHTML = `${key}${ct.name}<span class="chord-label">${ct.short}</span>`;
-    btn.addEventListener('click', () => answerIdentify(idx));
+    btn.innerHTML = `${key}${a.label}<span class="chord-label">${a.sub}</span>`;
+    btn.addEventListener('click', () => answerIdentify(a.answer));
     grid.appendChild(btn);
   });
 }
@@ -1813,12 +1866,12 @@ function resetIdentifyGrid() {
   renderMasteryDisplay();
 }
 
-// Light every button that sounds like the current chord, and show the voicing
-function revealIdentify(chosenIdx, cls) {
+// Light every button that matches the current chord, and show the voicing
+function revealIdentify(chosen, cls) {
   identifyAnswered = true;
   document.querySelectorAll('.identify-btn').forEach(b => {
-    const idx = +b.dataset.idx;
-    if (identifyMatches(idx)) b.classList.add(idx === chosenIdx ? cls : 'also');
+    const ans = b.dataset.answer;
+    if (identifyMatches(ans)) b.classList.add(ans === String(chosen) ? cls : 'also');
   });
   chordHitNotes = new Set(chordTargetNotes);
   chordTargetNotes = new Set();
@@ -1840,17 +1893,18 @@ function advanceIdentify(delay) {
   later(go, delay);
 }
 
-function answerIdentify(idx) {
+function answerIdentify(answer) {
+  answer = String(answer);
   // The game screen, not gameActive: the first chord plays before the game
   // goes active, and an answer during it should count like any other
   const onGameScreen = document.getElementById('game').classList.contains('active');
   if (!onGameScreen || !isChordIdentify() || identifyAnswered || !identifyHeard) return;
   if (!listenGateOpen()) armListening();
-  if (identifyMatches(idx)) {
-    revealIdentify(idx, 'correct');
+  if (identifyMatches(answer)) {
+    revealIdentify(answer, 'correct');
     advanceIdentify(900);
   } else {
-    const btn = document.querySelector(`.identify-btn[data-idx="${idx}"]`);
+    const btn = [...document.querySelectorAll('.identify-btn')].find(b => b.dataset.answer === answer);
     if (btn) { btn.classList.add('wrong'); btn.disabled = true; }
     markAssignmentMistake(); // keep guessing — but the round no longer counts
   }
@@ -2064,8 +2118,11 @@ function updateDisplay() {
       : 'Press <kbd>SPACE</kbd> or tap here to replay cadence';
     updateBassPiano(null);
   } else if (gameMode === 'chord' && isChordIdentify()) {
-    document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreChordId}`;
-    document.getElementById('intervalDisplay').textContent = 'Which chord is this?';
+    document.getElementById('hiScoreGame').textContent = `BEST: ${identifyBest()}`;
+    document.getElementById('intervalDisplay').textContent =
+      identifyAnswerBy === 'position' ? `${currentChordType.quality} — which position?`
+      : identifyAnswerBy === 'quality' ? 'Which quality?'
+      : 'Which chord is this?';
     setNoteBoxLabels('Choices', 'Answer');
     document.getElementById('noteFrom').textContent = identifyOrder.length;
     document.getElementById('noteTarget').textContent = identifyAnswered ? currentChordType.short : '?';
@@ -2187,6 +2244,9 @@ function setChordPlayback(mode) {
     b.classList.toggle('selected', b.dataset.cplay === mode);
   });
   refreshInputHint();
+  const idRow = document.getElementById('identifyByRow');
+  if (idRow) idRow.style.display = mode === 'identify' ? '' : 'none';
+  updateStartBtn();
   if (gameMode === 'chord') buildPiano();
 }
 
@@ -2889,7 +2949,10 @@ function skipCurrentAssignment() {
   // Identify: show what it was before moving on — that's the learning moment
   if (isChordIdentify()) {
     if (identifyAnswered) return;
-    revealIdentify(CHORD_TYPES.indexOf(currentChordType), 'reveal');
+    const truth = identifyAnswerBy === 'position' ? currentChordType.pos
+      : identifyAnswerBy === 'quality' ? currentChordType.quality
+      : CHORD_TYPES.indexOf(currentChordType);
+    revealIdentify(truth, 'reveal');
     advanceIdentify(1400);
     return;
   }
@@ -2915,6 +2978,8 @@ function currentAssignmentInfo() {
       const idx = CHORD_TYPES.indexOf(currentChordType);
       if (idx < 0) return null;
       if (isChordIdentify()) {
+        if (identifyAnswerBy === 'position') return { key: `chord-pos:${idx}`, label: `${currentChordType.name} (which position)`, mode: 'chord' };
+        if (identifyAnswerBy === 'quality') return { key: `chord-qual:${idx}`, label: `${currentChordType.name} (which quality)`, mode: 'chord' };
         return { key: `chord-id:${idx}`, label: `${currentChordType.name} (by ear)`, mode: 'chord' };
       }
       return { key: `chord:${idx}`, label: currentChordType.name, mode: 'chord' };
@@ -3577,12 +3642,12 @@ function endGame(quit) {
   } else if (gameMode === 'chord') {
     // Naming a chord by ear and producing one are different skills — separate bests
     const identify = isChordIdentify();
-    const prevBest = identify ? hiScoreChordId : hiScoreChord;
+    const prevBest = identify ? identifyBest() : hiScoreChord;
     const isNewBest = score > prevBest;
     if (isNewBest) {
       if (identify) {
-        hiScoreChordId = score;
-        localStorage.setItem('notechaser_hi_chord_id', hiScoreChordId);
+        localStorage.setItem(ID_BEST_KEY[identifyAnswerBy], String(score));
+        if (identifyAnswerBy === 'type') hiScoreChordId = score;
       } else {
         hiScoreChord = score;
         localStorage.setItem('notechaser_hi_chord', hiScoreChord);
