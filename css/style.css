@@ -1264,6 +1264,47 @@ body::before {
   box-shadow: 0 0 12px var(--red);
 }
 
+/* ── PROGRESSIONS BY EAR ── */
+.prog-slots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.prog-slot {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.9rem;
+  min-width: 52px;
+  text-align: center;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px dashed var(--border);
+  color: var(--text-dim);
+}
+.prog-slot.current {
+  border: 1px solid var(--cyan);
+  color: var(--cyan);
+  box-shadow: var(--glow-cyan);
+}
+.prog-slot.known {
+  border: 1px solid var(--green-dim);
+  color: var(--green);
+}
+.slot-pos {
+  font-size: 0.65rem;
+  margin-left: 4px;
+  opacity: 0.8;
+}
+.prog-arrow { color: var(--text-dim); font-size: 0.8rem; }
+/* Roman-numeral root buttons: short labels, so make them big */
+.identify-btn.roman {
+  font-family: 'Orbitron', monospace;
+  font-size: 1.1rem;
+  min-height: 56px;
+}
+
 /* ── CHORD IDENTIFY ── */
 .identify-grid { display: none; }
 

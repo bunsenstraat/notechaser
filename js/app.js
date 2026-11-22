@@ -134,7 +134,7 @@ function handleMidiMessage(msg) {
 function onMidiNoteChange() {
   if (!gameActive || melodyPlaying || !useMidi) return;
   if (!listenGateOpen()) return; // waiting for the player to start the assignment
-  if (isChordIdentify()) return;  // answers come from the buttons
+  if (isChordIdentify() || isProgEar()) return;  // answers come from the buttons
 
   if (gameMode === 'chord') {
     // Chord mode: check if held notes match all target notes
@@ -289,8 +289,8 @@ function setInputMode(midi) {
 let inputHintNotice = ''; // one-off "X was turned off" message, cleared on start
 
 function refreshInputHint() {
-  let text = isChordIdentify()
-    ? 'No microphone needed — listen, then pick the chord'
+  let text = isChordIdentify() || isProgEar()
+    ? 'No microphone needed — listen, then pick the answer'
     : useMidi
       ? 'Connect a MIDI keyboard — or use the on-screen keyboard at the bottom'
       : 'Microphone access required for pitch detection';
@@ -1025,7 +1025,11 @@ function updateStartBtn() {
         : '';
     }
   } else if (gameMode === 'bass') {
-    document.getElementById('startBtn').disabled = selectedCadences.size === 0;
+    const naming = isProgEar();
+    document.getElementById('startBtn').disabled = naming ? pePlayable().length === 0 : selectedCadences.size === 0;
+    const note = document.getElementById('bassExNote');
+    if (note) note.textContent = naming && pePlayable().length === 0 && selectedCadences.size > 0
+      ? 'Single chords have no progression to name — select some progressions.' : '';
   } else if (gameMode === 'scale') {
     document.getElementById('startBtn').disabled = selectedScalesForSing.size === 0;
   } else if (gameMode === 'licks') {
@@ -1196,7 +1200,9 @@ function playAnswer() {
 
 function replayBaseNote() {
   if (!gameActive || melodyPlaying) return;
-  if (gameMode === 'bass') {
+  if (isProgEar()) {
+    peReplay();
+  } else if (gameMode === 'bass') {
     playCadence(bassCadenceChords, () => {
       roundStart = performance.now();
     });
@@ -1255,6 +1261,9 @@ document.addEventListener('keydown', (e) => {
     // Useful in mic modes when you know you blew it but the timer hasn't run out.
     e.preventDefault();
     skipCurrentAssignment();
+  } else if (gameActive && isProgEar() && /^[1-9]$/.test(e.key)) {
+    const v = peOrder[+e.key - 1];
+    if (v !== undefined) { e.preventDefault(); peAnswer(v); }
   } else if (gameActive && isChordIdentify() && /^[1-9]$/.test(e.key)) {
     const idx = identifyOrder[+e.key - 1];
     if (idx !== undefined) { e.preventDefault(); answerIdentify(idx); }
@@ -2095,13 +2104,17 @@ function updateDisplay() {
   // Hide answer button by default; chord mode will show it for sing
   document.getElementById('answerBtn').style.display = 'none';
   setNoteBoxLabels('From', 'Sing');
-  document.getElementById('game').classList.toggle('identify-mode', isChordIdentify());
+  document.getElementById('game').classList.toggle('identify-mode', isChordIdentify() || isProgEar());
+  peRenderSlots();
   // Refresh the overlearning mastery ticker for the current assignment
   renderMasteryDisplay();
   updateContinueHint();
   renderSungLog();
 
-  if (gameMode === 'bass') {
+  if (isProgEar()) {
+    document.getElementById('hiScoreGame').textContent = `BEST: ${peBest()}`;
+    peRender();
+  } else if (gameMode === 'bass') {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreBass}`;
     const isSingle = currentCadence.chords.length === 1;
     const chordName = currentCadence.chords[bassIndex] ? currentCadence.chords[bassIndex].name : '✓';
@@ -2308,7 +2321,7 @@ async function startGame() {
   // Rebind MIDI out if the device was plugged in after the page loaded
   if (MIDI_OUT_CFG.id && !midiOutActive()) await configureMidiOut(MIDI_OUT_CFG);
 
-  if (isChordIdentify()) {
+  if (isChordIdentify() || isProgEar()) {
     initAudio(); // answers come from the buttons — nothing to listen to
   } else if (useMidi) {
     const ok = await initMidi();
@@ -2342,7 +2355,9 @@ async function startGame() {
   beginAssignmentAttempt(); // first round of the game starts clean
   showScreen('game');
 
-  if (gameMode === 'bass') {
+  if (isProgEar()) {
+    peStartGame(); // name the progression / roots / positions (js/progear.js)
+  } else if (gameMode === 'bass') {
     bassKeyRoot = pickBassKey();
     currentKeyDisplay = jazzNoteName(bassKeyRoot);
     const indices = [...selectedCadences];
@@ -2633,8 +2648,8 @@ function gameLoop() {
     return;
   }
 
-  // Identify: answers come from the buttons, just keep the timer running
-  if (isChordIdentify()) {
+  // Identify / progressions by ear: answers come from the buttons
+  if (isChordIdentify() || isProgEar()) {
     animFrame = requestAnimationFrame(gameLoop);
     return;
   }
@@ -2895,6 +2910,7 @@ function mistakeHoldCheck(roundedMidi, isTargetMatch, now) {
 function skipCurrentAssignment() {
   if (!gameActive || melodyPlaying) return;
   if (isChordIdentify() && identifyAnswered) return; // already right, don't taint it
+  if (isProgEar()) { peSkip(); return; }             // reveals the answer itself
   // Mark the round tainted — onSuccess will commit as mistake and skip reward
   markAssignmentMistake();
 
@@ -3005,6 +3021,7 @@ function currentAssignmentInfo() {
       if (idx < 0) return null;
       return { key: `lick:${idx}`, label: currentLick.name, mode: 'licks' };
     }
+    if (isProgEar()) return peAssignmentInfo();
     if (gameMode === 'bass') {
       if (!currentCadence) return null;
       const cIdx = CADENCES.indexOf(currentCadence);
@@ -3062,6 +3079,7 @@ function renderMasteryDisplay() {
   if (!info) { el.textContent = ''; el.style.display = 'none'; return; }
   // Identify: the label IS the answer — and even the streak count hints at it
   if (isChordIdentify() && !identifyAnswered) { el.textContent = ''; el.style.display = 'none'; return; }
+  if (isProgEar() && !peDone) { el.textContent = ''; el.style.display = 'none'; return; }
   // Peek — don't auto-create a record just for display; show fresh defaults
   // if we haven't tracked this assignment before.
   const stats = progressPeek(info.key) || { currentStreak: 0, mistakes: 0, mastered: false };
@@ -3623,7 +3641,23 @@ function endGame(quit) {
 
   if (!quit) playFailSound();
 
-  if (gameMode === 'bass') {
+  if (isProgEar()) {
+    // Each naming exercise keeps its own best
+    const prevBest = peBest();
+    const isNewBest = score > prevBest;
+    if (isNewBest) localStorage.setItem(`notechaser_hi_prog_${bassExercise}`, String(score));
+    document.getElementById('goScore').textContent = score;
+    document.getElementById('goScoreLabel').textContent =
+      { name: 'Progressions Named', roots: 'Progressions Rooted', positions: 'Positions Named' }[bassExercise];
+    const bestEl = document.getElementById('goBest');
+    if (isNewBest && score > 0) {
+      bestEl.textContent = 'NEW BEST!';
+      bestEl.className = 'go-best go-new-best';
+    } else {
+      bestEl.textContent = `BEST: ${prevBest}`;
+      bestEl.className = 'go-best';
+    }
+  } else if (gameMode === 'bass') {
     const isNewBest = score > hiScoreBass;
     if (isNewBest) {
       hiScoreBass = score;

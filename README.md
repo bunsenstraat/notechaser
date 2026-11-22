@@ -41,7 +41,8 @@ Hold the correct pitch (within ±50 cents) for half a second to lock it in. The 
 - 🎵 **Piano visualization** highlighting base note, target, and what you're singing
 - 🎹 **Your own SoundFont** — load an `.sf2` piano (Settings → Piano Sound) and every note uses it: velocity layers, stereo samples, loops, envelopes. Read in the page and kept in this browser's storage — never uploaded
 - 🎛️ **MIDI out** — send every note to an external synth or DAW (Settings → MIDI Out; Chrome/Edge). Sample-accurate timing; MIDI keyboard input and MIDI out are never on together, so the app can't hear its own notes
-- 🎧 **Chord Identify** — hear a chord, name it from the chord types you selected (no mic needed; keys 1–9 answer). Types that sound identical with a random root (e.g. Major 2nd and Min7 RL-A) all count as correct
+- 🎧 **Chord Identify** — hear a chord, name it from the chord types you selected (no mic needed; keys 1–9 answer). Types that sound identical with a random root (e.g. Major 2nd and Min7 RL-A) all count as correct. Answer by **type**, by **position** only (A/B/C, with the quality shown), or by **quality** only (positions mixed)
+- 🎧 **Progressions by ear** (Find the Bass → Exercise) — besides singing the roots, *name the progression* (ii-V-I, turnaround, backdoor, tritone sub…), *name the roots* chord by chord in Roman numerals, or *name the positions* (A/B) as the progression plays. Voiced like a pianist: positions switch A↔B on every move by a 4th, and the whole progression is planned so it never leaps an octave halfway through
 - 🎹 **Collapsible playable keyboard** at the bottom of the exercise screen — tap to hear notes (multi-touch, glissando), and in MIDI input mode it doubles as an on-screen MIDI keyboard
 - 🔁 **Replay base note** mid-game with R key
 - ⏸ **ENTER pauses/resumes listening** any time — and with "Wait for ENTER before listening" on, every assignment waits for you instead of auto-starting while you're still singing the last one

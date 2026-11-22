@@ -122,7 +122,22 @@
 
     <!-- Bass mode setup -->
     <div id="bassSetup" style="display:none">
-      <div class="section-label">Cadences</div>
+      <div class="section-label">Exercise</div>
+      <div class="dir-row">
+        <button class="dir-btn bass-ex-btn selected" data-bex="sing" onclick="setBassExercise('sing')" title="Hear the progression (no bass), sing each chord's root">&#127908; Sing the roots</button>
+        <button class="dir-btn bass-ex-btn" data-bex="name" onclick="setBassExercise('name')" title="Hear a progression, name it">&#127911; Name the progression</button>
+        <button class="dir-btn bass-ex-btn" data-bex="roots" onclick="setBassExercise('roots')" title="Name each chord's root as a degree: I, ii, V, ♭VII…">&#127911; Name the roots</button>
+        <button class="dir-btn bass-ex-btn" data-bex="positions" onclick="setBassExercise('positions')" title="Progressions voiced in A/B positions — name each chord's position">&#127911; Name the positions</button>
+      </div>
+      <div id="bassVoicingRow" style="display:none">
+        <div class="section-label" style="margin-top:12px">Voicings</div>
+        <div class="dir-row">
+          <button class="dir-btn bass-voicing-btn selected" data-bvoc="rootless" onclick="setBassVoicing('rootless')" title="Rootless A/B voicings over a bass line — the jazz combo sound">Rootless + bass</button>
+          <button class="dir-btn bass-voicing-btn" data-bvoc="positions" onclick="setBassVoicing('positions')" title="A/B position voicings with the root in the bass, voice-led">A/B positions</button>
+        </div>
+      </div>
+      <div class="mic-hint" id="bassExNote" style="margin-top:6px"></div>
+      <div class="section-label" style="margin-top:12px">Progressions</div>
       <div class="scale-grid" id="cadenceGrid"></div>
       <div class="section-label" style="margin-top:12px">Presets</div>
       <div class="preset-row">
@@ -210,6 +225,7 @@
       <div class="preset-row">
         <button class="preset-btn" onclick="progressionPreset('major')">Major</button>
         <button class="preset-btn" onclick="progressionPreset('minor')">Minor</button>
+        <button class="preset-btn" onclick="progressionPreset('positions')" title="ii-V-I with A/B position voicings (root in the bass)">Positions</button>
         <button class="preset-btn" onclick="progressionPreset('all')">All</button>
         <button class="preset-btn" onclick="progressionPreset('none')">Clear</button>
       </div>
@@ -468,6 +484,9 @@
     <!-- Chord mode: the notes you sang — hits and misses, in order -->
     <div class="sung-log" id="sungLog" style="display:none"></div>
 
+    <!-- Progressions by ear: the chords as slots, filled in as you name them -->
+    <div class="prog-slots" id="progSlots" style="display:none"></div>
+
     <div class="replay-hint" id="replayHint">Press <kbd>SPACE</kbd> or tap here to replay base note</div>
     <div class="replay-hint answer-btn" id="answerBtn" style="display:none;" onclick="playAnswer()">🎹 Play Answer (hear the chord)</div>
     <div class="skip-hint" id="skipHint" title="Skip this assignment — it gets marked as a mistake for overlearning">Press <kbd>X</kbd> to skip (counts as mistake)</div>
@@ -541,6 +560,7 @@
 <script src="js/data.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/soundfont.js"></script>
+<script src="js/progear.js"></script>
 <script src="js/progress.js"></script>
 <script src="js/app.js"></script>
 <script src="js/keyboard.js"></script>
