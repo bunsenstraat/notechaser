@@ -1312,18 +1312,86 @@ async function startMic() {
   initAudio();
   // Resume AudioContext (required on mobile after user gesture)
   if (audioCtx.state === 'suspended') await audioCtx.resume();
-  const source = audioCtx.createMediaStreamSource(micStream);
-  analyser = audioCtx.createAnalyser();
-  // Use larger FFT for better low-frequency resolution on high sample rate devices
+  stopPitchChain();
+  micSource = audioCtx.createMediaStreamSource(micStream);
+  // Larger window for better low-frequency resolution on high sample rate devices
   const sr = audioCtx.sampleRate;
-  analyser.fftSize = sr > 44100 ? 8192 : 4096;
+  const size = sr > 44100 ? 8192 : 4096;
+  const how = (await startPitchWorker(micSource, size)) ? 'worker' : (startPitchAnalyser(micSource, size), 'main thread');
+  console.log('Mic started: sampleRate=' + sr + ', window=' + size + ', detection on ' + how);
+}
+
+// Detection normally runs in a Web Worker, fed by an AudioWorklet that taps
+// the mic: neither the UI nor the audio thread does the maths. Where that
+// isn't available (or fails to start) it falls back to an AnalyserNode read
+// on the main thread every frame.
+let micSource = null, pitchNode = null, pitchWorker = null;
+let pitchLatest = null, pitchLatestAt = 0, pitchWorkletReady = false, pitchWatchdog = null;
+
+async function startPitchWorker(source, size) {
+  if (!audioCtx.audioWorklet || typeof Worker === 'undefined' || typeof AudioWorkletNode === 'undefined') return false;
+  try {
+    if (!pitchWorkletReady) {
+      await audioCtx.audioWorklet.addModule('js/pitch-worklet.js');
+      pitchWorkletReady = true;
+    }
+    const worker = new Worker('js/pitch-worker.js');
+    const channel = new MessageChannel();
+    worker.postMessage({ type: 'init', sampleRate: audioCtx.sampleRate, size, port: channel.port2 }, [channel.port2]);
+    const node = new AudioWorkletNode(audioCtx, 'pitch-tap', {
+      numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
+      channelCount: 1, channelCountMode: 'explicit', // mic down-mixed to mono, like the analyser did
+    });
+    node.port.postMessage({ port: channel.port1 }, [channel.port1]);
+    pitchLatest = null;
+    pitchLatestAt = 0;
+    worker.onmessage = e => { pitchLatest = e.data; pitchLatestAt = performance.now(); };
+    const fallBack = why => {
+      if (pitchWorker !== worker) return;
+      console.warn('Pitch worker unavailable (' + why + ') — detecting on the main thread');
+      teardownPitchWorker();
+      if (micSource === source) startPitchAnalyser(source, size);
+    };
+    worker.onerror = e => { e.preventDefault && e.preventDefault(); fallBack('error'); };
+    source.connect(node);
+    node.connect(audioCtx.destination); // silent — but keeps the node pulled on every browser
+    pitchWorker = worker;
+    pitchNode = node;
+    // Nothing heard back within a couple of seconds → something's blocked
+    clearTimeout(pitchWatchdog);
+    pitchWatchdog = setTimeout(() => { if (pitchWorker === worker && !pitchLatestAt) fallBack('no data'); }, 2500);
+    return true;
+  } catch (e) {
+    console.warn('AudioWorklet pitch detection failed to start:', e);
+    teardownPitchWorker();
+    return false;
+  }
+}
+
+function startPitchAnalyser(source, size) {
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = size;
   analyser.smoothingTimeConstant = 0;
   source.connect(analyser);
   pitchBuffer = new Float32Array(analyser.fftSize);
-  console.log('Mic started: sampleRate=' + sr + ', fftSize=' + analyser.fftSize);
+}
+
+function teardownPitchWorker() {
+  clearTimeout(pitchWatchdog);
+  if (pitchNode) { try { pitchNode.disconnect(); } catch (e) {} pitchNode = null; }
+  if (pitchWorker) { pitchWorker.terminate(); pitchWorker = null; }
+  pitchLatest = null;
+  pitchLatestAt = 0;
+}
+
+function stopPitchChain() {
+  teardownPitchWorker();
+  if (analyser) { try { analyser.disconnect(); } catch (e) {} analyser = null; }
+  if (micSource) { try { micSource.disconnect(); } catch (e) {} micSource = null; }
 }
 
 function stopMic() {
+  stopPitchChain();
   if (micStream) {
     micStream.getTracks().forEach(t => t.stop());
     micStream = null;
@@ -1331,6 +1399,13 @@ function stopMic() {
 }
 
 function detectPitch() {
+  if (pitchWorker) {
+    // The worker's latest reading — ignored once stale (it reports ~45×/s)
+    const r = pitchLatest;
+    if (!r || performance.now() - pitchLatestAt > 250) return null;
+    if (r.rms < RMS_THRESHOLD || r.freq === null || r.ratio < CONFIDENCE_THRESHOLD) return null;
+    return r.freq;
+  }
   if (!analyser) return null;
   analyser.getFloatTimeDomainData(pitchBuffer);
 
@@ -1340,10 +1415,13 @@ function detectPitch() {
   rms = Math.sqrt(rms / pitchBuffer.length);
   if (rms < RMS_THRESHOLD) return null;
 
-  // Autocorrelation
+  // Autocorrelation — only over the lags the search below can use
   const SIZE = pitchBuffer.length;
+  const sampleRate = audioCtx.sampleRate;
+  const minLag = Math.floor(sampleRate / 600); // max ~600Hz
+  const maxLag = Math.floor(sampleRate / 55);  // min ~55Hz
   const corr = new Float32Array(SIZE);
-  for (let lag = 0; lag < SIZE; lag++) {
+  for (let lag = 0; lag <= Math.min(SIZE - 1, maxLag + 1); lag++) {
     let sum = 0;
     for (let i = 0; i < SIZE - lag; i++) {
       sum += pitchBuffer[i] * pitchBuffer[i + lag];
@@ -1353,12 +1431,9 @@ function detectPitch() {
 
   // Find first dip then peak
   let d = 0;
-  while (d < SIZE - 1 && corr[d] > corr[d + 1]) d++;
+  while (d < maxLag && corr[d] > corr[d + 1]) d++;
 
   let maxVal = -1, maxIdx = -1;
-  const sampleRate = audioCtx.sampleRate;
-  const minLag = Math.floor(sampleRate / 600); // max ~600Hz
-  const maxLag = Math.floor(sampleRate / 55);  // min ~55Hz
 
   for (let i = Math.max(d, minLag); i < Math.min(SIZE - 1, maxLag); i++) {
     if (corr[i] > maxVal) {

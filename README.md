@@ -33,7 +33,7 @@ Hold the correct pitch (within ±50 cents) for half a second to lock it in. The 
 
 ## Features
 
-- 🎤 **Real-time pitch detection** using autocorrelation — no server, everything runs in your browser
+- 🎤 **Real-time pitch detection** using autocorrelation — no server, everything runs in your browser. It runs in a background worker fed by an AudioWorklet, so listening never competes with the UI or the piano sound (older browsers fall back to the main thread)
 - 🎹 **12 intervals** from minor 2nd to octave
 - ⬆️⬇️ **Direction control** — ascending, descending, or both
 - ⏱️ **Adjustable time limit** with slider (3–20 seconds)
