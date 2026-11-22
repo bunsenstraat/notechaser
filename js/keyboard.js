@@ -230,6 +230,7 @@ const PK_MIRROR = [
   ['active-from', 'mirror-from'],
   ['active-target', 'mirror-target'],
   ['active-singing', 'mirror-hit'],
+  ['active-wrong', 'mirror-wrong'],
 ];
 
 // What the player is being asked to hit right now, so the keys stay in reach.
