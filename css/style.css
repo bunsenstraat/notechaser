@@ -110,6 +110,14 @@ body::before {
 }
 .progress-btn:hover { color: var(--magenta); border-color: var(--magenta-dim); }
 
+/* Phones: the title fills the width, so the 📊/⚙ buttons get their own slim
+   row above it — on the menu only (with-tools), so the game keeps its height */
+@media (max-width: 600px) {
+  .header.with-tools { padding-top: 50px; }
+  .header.with-tools .settings-gear,
+  .header.with-tools .progress-btn { top: 6px; transform: none; }
+}
+
 /* Progress screen */
 .progress-summary {
   font-family: 'Chakra Petch', sans-serif;

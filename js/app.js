@@ -1954,6 +1954,7 @@ function showScreen(id) {
   const progressBtn = document.getElementById('progressBtn');
   if (progressBtn) progressBtn.style.display = id === 'setup' ? '' : 'none';
   document.getElementById(id).classList.add('active');
+  document.querySelector('.header').classList.toggle('with-tools', id === 'setup');
   disarmGameBack();
   // The playable keyboard dock only rides along with the game screen
   if (typeof pkOnScreenChange === 'function') pkOnScreenChange(id);
@@ -3755,6 +3756,7 @@ function backToSetup() {
 
 // ── SETTINGS ──
 function openSettings() {
+  document.querySelector('.header').classList.toggle('with-tools', false);
   document.getElementById('setup').classList.remove('active');
   document.getElementById('settings').classList.add('active');
   document.getElementById('settingsGear').style.display = 'none';
@@ -3764,6 +3766,7 @@ function openSettings() {
 }
 
 function closeSettings() {
+  document.querySelector('.header').classList.toggle('with-tools', true);
   document.getElementById('settings').classList.remove('active');
   document.getElementById('setup').classList.add('active');
   document.getElementById('settingsGear').style.display = '';
@@ -3775,6 +3778,7 @@ function closeSettings() {
 let _progressFilter = 'all';
 
 function openProgress() {
+  document.querySelector('.header').classList.toggle('with-tools', false);
   document.getElementById('setup').classList.remove('active');
   document.getElementById('progress').classList.add('active');
   document.getElementById('settingsGear').style.display = 'none';
@@ -3783,6 +3787,7 @@ function openProgress() {
 }
 
 function closeProgress() {
+  document.querySelector('.header').classList.toggle('with-tools', true);
   document.getElementById('progress').classList.remove('active');
   document.getElementById('setup').classList.add('active');
   document.getElementById('settingsGear').style.display = '';
