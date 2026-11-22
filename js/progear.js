@@ -284,7 +284,7 @@ function peFinish(skipped) {
     document.getElementById('streakDots').appendChild(dot);
   }
   renderMasteryDisplay(); // the name is safe to show now
-  later(peNext, 1400);
+  nextQuestion(peNext, 1400);
 }
 
 function peNext() {

@@ -27,7 +27,7 @@ const DEFAULTS = {
   cents: 50, holdMs: 500, mistakeHoldMs: 700,
   sensitivity: 5, confidence: 20,
   announceVoice: true, autoPlayIntro: true, hidePiano: false, hideTarget: false,
-  playKeyboard: true, manualAdvance: false,
+  playKeyboard: true, manualAdvance: false, waitNext: false,
   midiOutId: '', midiOutName: '', midiOutChannel: 0, midiOutBuiltin: false,
 };
 
@@ -38,6 +38,7 @@ let HIDE_PIANO = false;
 let HIDE_TARGET = false;
 let PLAY_KEYBOARD = true;
 let MANUAL_ADVANCE = false;
+let WAIT_NEXT = false; // listen-and-answer modes: stay on the answer until you ask for the next one
 let MIDI_OUT_CFG = { id: '', name: '', channel: 0, builtin: false };
 
 // Mutable ranges (loaded from settings)
@@ -463,8 +464,31 @@ function later(fn, ms) {
 // one), and ENTER pauses/resumes listening at any time.
 let awaitingContinue = false;
 let listenPaused = false;
+// "Wait before the next question" (Chord Identify, progressions by ear): once
+// answered, the game stays on the answer — replay it, think it over — and the
+// next question waits here until ENTER / a tap. The clock is frozen meanwhile.
+let pendingNext = null;
 
-function listenGateOpen() { return !awaitingContinue && !listenPaused; }
+function listenGateOpen() { return !awaitingContinue && !listenPaused && !pendingNext; }
+
+// Move on after a revealed answer: straight away (after `ms`), or — with the
+// setting on — when the player asks for it
+function nextQuestion(fn, ms) {
+  if (!WAIT_NEXT) { later(fn, ms); return; }
+  const epoch = gameEpoch;
+  pendingNext = () => { if (epoch === gameEpoch) fn(); };
+  updateContinueHint();
+}
+
+function goToNextQuestion() {
+  const fn = pendingNext;
+  if (!fn || !gameActive) return false;
+  pendingNext = null;
+  roundStart = performance.now();
+  updateContinueHint();
+  fn();
+  return true;
+}
 
 // Arming during playback is allowed — the round still can't start until the
 // playback finishes (gameLoop gates on melodyPlaying), but the keypress isn't
@@ -492,6 +516,7 @@ function pauseListening() {
 
 function toggleListening() {
   if (!gameActive) return;
+  if (goToNextQuestion()) return;
   if (listenGateOpen()) pauseListening();
   else armListening();
 }
@@ -503,6 +528,7 @@ function updateContinueHint() {
   if (!el) return;
   // Cheap to call from the game loop: only touches the DOM when it changes
   const state = !gameActive ? 'off'
+    : pendingNext ? 'next'
     : awaitingContinue ? 'waiting'
     : listenPaused ? 'paused'
     : MANUAL_ADVANCE ? 'live' : 'hidden';
@@ -510,7 +536,10 @@ function updateContinueHint() {
   _continueHintState = state;
 
   if (!gameActive) { el.style.display = 'none'; return; }
-  if (awaitingContinue) {
+  if (pendingNext) {
+    el.className = 'continue-hint waiting';
+    el.innerHTML = '&#9654; Next: press <kbd>ENTER</kbd> or tap here &middot; <kbd>SPACE</kbd> hears it again';
+  } else if (awaitingContinue) {
     el.className = 'continue-hint waiting';
     el.innerHTML = '&#9654; Press <kbd>ENTER</kbd> or tap here when you\'re ready';
   } else if (listenPaused) {
@@ -1974,7 +2003,16 @@ function advanceIdentify(delay) {
     if (!gameActive || !isChordIdentify()) return;
     onSuccess();
   };
-  later(go, delay);
+  if (!WAIT_NEXT) { later(go, delay); return; }
+  // Waiting: the reward has to come now, with the answer, not when you
+  // eventually move on. The very first chord is answered before the game
+  // goes active — hold off until it is, so the wait has somewhere to live.
+  if (!currentRoundHasMistake) { celebrate(); celebratedEarly = true; }
+  const hold = () => {
+    if (!gameActive) { if (isChordIdentify()) later(hold, 100); return; }
+    nextQuestion(go, 0);
+  };
+  hold();
 }
 
 function answerIdentify(answer) {
@@ -2422,6 +2460,8 @@ async function startGame() {
   sungLogRound = -1;
   listenPaused = false;
   awaitingContinue = MANUAL_ADVANCE; // first assignment waits for you too
+  pendingNext = null;
+  celebratedEarly = false;
 
   document.getElementById('streakDots').innerHTML = '';
   document.getElementById('holdProgress').style.width = '0%';
@@ -3168,12 +3208,24 @@ function renderMasteryDisplay() {
   el.classList.toggle('mastered', stats.mastered);
 }
 
+let celebratedEarly = false; // the chime already played when the answer was given
+
+function celebrate() {
+  playSuccessChime();
+  const flash = document.getElementById('successFlash');
+  flash.classList.remove('show');
+  void flash.offsetWidth;
+  flash.classList.add('show');
+}
+
 function onSuccess() {
   // Capture the taint flag up-front; branch commits will reset it, but we need
   // it below to decide whether to celebrate and increment the session score.
   // A tainted round (wrong note / skipped) advances the game but doesn't count
   // as a success — that's the whole point of the overlearning model.
   const wasClean = !currentRoundHasMistake;
+  const alreadyCelebrated = celebratedEarly;
+  celebratedEarly = false;
 
   // Manual advance: shut the gate so the next assignment waits for you. Without
   // this the mic is live the instant the next target appears — and in Target
@@ -3189,11 +3241,7 @@ function onSuccess() {
   // we only want to commit when the WHOLE assignment is done.
 
   if (wasClean) {
-    playSuccessChime();
-    const flash = document.getElementById('successFlash');
-    flash.classList.remove('show');
-    void flash.offsetWidth;
-    flash.classList.add('show');
+    if (!alreadyCelebrated) celebrate();
   } else if (gameMode !== 'bass' && gameMode !== 'chord' && gameMode !== 'progression') {
     // The round is tainted, so no celebration — but the note WAS right and the
     // player still needs to hear that it landed, otherwise every remaining note
@@ -3710,6 +3758,8 @@ function endGame(quit) {
   melodyPlaying = false;
   awaitingContinue = false;
   listenPaused = false;
+  pendingNext = null;
+  celebratedEarly = false;
   updateContinueHint();
   if (animFrame) cancelAnimationFrame(animFrame);
   stopMic();
@@ -4066,6 +4116,7 @@ function loadSettingsUI() {
   document.getElementById('sHideTarget').checked = s.hideTarget === true;
   document.getElementById('sPlayKeyboard').checked = s.playKeyboard !== false;
   document.getElementById('sManualAdvance').checked = s.manualAdvance === true;
+  document.getElementById('sWaitNext').checked = s.waitNext === true;
   loadMidiOutUI(s);
   updateSettingDisplay();
 }
@@ -4183,6 +4234,7 @@ function applySettings(s) {
   HIDE_TARGET = s.hideTarget === true;
   PLAY_KEYBOARD = s.playKeyboard !== false;
   MANUAL_ADVANCE = s.manualAdvance === true;
+  WAIT_NEXT = s.waitNext === true;
   MIDI_OUT_CFG = {
     id: s.midiOutId || '', name: s.midiOutName || '',
     channel: s.midiOutChannel | 0, builtin: s.midiOutBuiltin === true,
@@ -4225,6 +4277,7 @@ function saveSettings() {
     hideTarget: document.getElementById('sHideTarget').checked,
     playKeyboard: document.getElementById('sPlayKeyboard').checked,
     manualAdvance: document.getElementById('sManualAdvance').checked,
+    waitNext: document.getElementById('sWaitNext').checked,
     midiOutId: document.getElementById('sMidiOut').value,
     midiOutName: (() => {
       const o = document.getElementById('sMidiOut').selectedOptions[0];

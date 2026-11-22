@@ -45,6 +45,7 @@ Hold the correct pitch (within ±50 cents) for half a second to lock it in. The 
 - 🎧 **Progressions by ear** (Find the Bass → Exercise) — besides singing the roots, *name the progression* (ii-V-I, turnaround, backdoor, tritone sub…), *name the roots* chord by chord in Roman numerals, or *name the positions* (A/B) as the progression plays. Voiced like a pianist: positions switch A↔B on every move by a 4th, and the whole progression is planned so it never leaps an octave halfway through
 - 🎹 **Collapsible playable keyboard** at the bottom of the exercise screen — tap to hear notes (multi-touch, glissando), and in MIDI input mode it doubles as an on-screen MIDI keyboard
 - 🔁 **Replay base note** mid-game with R key
+- ⏭ **Wait before the next question** (Settings) — in Chord Identify and the progression exercises, stay on the revealed answer (SPACE replays it) until you press ENTER or tap Next, instead of moving on by itself
 - ⏸ **ENTER pauses/resumes listening** any time — and with "Wait for ENTER before listening" on, every assignment waits for you instead of auto-starting while you're still singing the last one
 - 📱 **Mobile friendly** — works on phone browsers with mic access
 - 🏆 **Streak counter** — compete with yourself
