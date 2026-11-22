@@ -637,7 +637,7 @@ const cadenceGrid = document.getElementById('cadenceGrid');
 CADENCES.forEach((cad, i) => {
   const btn = document.createElement('button');
   btn.className = 'scale-btn cadence-btn';
-  btn.innerHTML = `${cad.name}<span class="chord-label">${cad.short}</span>`;
+  btn.innerHTML = `${cad.name}<span class="chord-label">${cad.short.replace(/→/g, '→\u200b')}</span>`;
   btn.dataset.idx = i;
   btn.addEventListener('click', () => {
     if (selectedCadences.has(i)) {
