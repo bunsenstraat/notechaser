@@ -146,18 +146,18 @@ function onMidiNoteChange() {
       if (!midiHeldNotes.has(t)) { allHit = false; break; }
     }
     if (allHit && chordTargetNotes.size > 0) {
+      chordTargetNotes.forEach(t => logSung(t, true));
       chordHitNotes = new Set(chordTargetNotes);
       chordTargetNotes = new Set();
       updateDisplay();
       onSuccess();
     } else if (chordTargetNotes.size > 0 && midiHeldNotes.size > 0) {
       // Any held note not in the target voicing taints this chord round.
+      let wrong = false;
       for (const n of midiHeldNotes) {
-        if (!chordTargetNotes.has(n) && !chordHitNotes.has(n)) {
-          markAssignmentMistake();
-          break;
-        }
+        if (!chordTargetNotes.has(n) && !chordHitNotes.has(n)) { logSung(n, false); wrong = true; }
       }
+      if (wrong) markAssignmentMistake();
     }
   } else if (gameMode === 'progression') {
     // Progression mode: check if held notes match current chord target
@@ -1659,6 +1659,8 @@ function chooseNextChord() {
   chordTargetNotes = new Set(currentChordType.intervals.map(s => chordRoot + s));
   chordHitNotes = new Set();
   holdingForMidi = null;
+  chordRoundId++;
+  wrongTrackMidi = null;
   if (isChordIdentify()) resetIdentifyGrid();
   buildPiano(); // rebuild piano to fit this voicing
 }
@@ -1675,6 +1677,91 @@ function updateChordPiano(singingMidi, heldMidiNotes) {
     if (singingMidi !== null && m === singingMidi) k.classList.add('active-from'); // magenta = currently playing
     if (heldMidiNotes && heldMidiNotes.has(m)) k.classList.add('active-from'); // magenta = MIDI held
   });
+  // Wrong notes sung on this chord, in red (cleared above with the others)
+  const wrong = sungLogRound === chordRoundId ? sungLog.filter(e => !e.ok).map(e => e.midi) : [];
+  document.querySelectorAll('.piano-key').forEach(k => {
+    k.classList.toggle('active-wrong', wrong.includes(parseInt(k.dataset.midi)));
+  });
+}
+
+// ── SUNG-NOTE LOG (chord mode) ──
+// Every note you land while singing a chord, in order: chord tones you hit,
+// and wrong notes held long enough to count. One mistake already spoils the
+// round for scoring, so mistake detection stops there — this keeps logging,
+// because seeing *what* you sang instead is how you learn from it.
+let sungLog = [];           // [{ midi, name, ok }]
+let sungLogRound = -1;      // which chord the log is about
+let sungLogChord = null;    // { name, root } of that chord
+let chordRoundId = 0;       // bumped for every new chord
+let wrongTrackMidi = null;
+let wrongTrackStart = 0;
+
+const DEGREE_NAMES = ['1', '♭2', '2', '♭3', '3', '4', '♭5', '5', '♯5', '6', '♭7', '7'];
+
+// Spell a note the way the degree implies, from the chord's root: in B the 5
+// is F♯ and the ♭3 is D — not whatever sharp/flat the note happens to get
+// elsewhere. The degree's number picks the letter; the pitch decides the
+// accidental.
+function spellFromRoot(rootName, degree, midi) {
+  const LETTERS = 'CDEFGAB';
+  const NATURAL = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  const rootLetter = LETTERS.indexOf((rootName || '').charAt(0).toUpperCase());
+  const num = parseInt(degree.replace(/[^0-9]/g, ''), 10);
+  if (rootLetter < 0 || !num) return midiToName(midi);
+  const letter = LETTERS[(rootLetter + num - 1) % 7];
+  const pc = ((midi % 12) + 12) % 12;
+  const diff = ((pc - NATURAL[letter] + 18) % 12) - 6; // -6..5, really -2..2
+  if (Math.abs(diff) > 2) return midiToName(midi);
+  const acc = { '-2': '𝄫', '-1': '♭', 0: '', 1: '♯', 2: '𝄪' }[diff];
+  const octave = Math.floor((midi - diff) / 12) - 1;   // Cb4 is B3's pitch, but octave 4
+  return `${letter}${acc}${octave}`;
+}
+
+function logSung(midi, ok) {
+  if (sungLogRound !== chordRoundId) {
+    // First note of a new chord: the old chord's log has had its moment
+    sungLog = [];
+    sungLogRound = chordRoundId;
+    sungLogChord = { name: currentChordType.name, root: chordRoot, rootName: currentKeyDisplay };
+  }
+  if (sungLog.some(e => e.midi === midi && e.ok === ok)) return; // once per note
+  // Right pitch class, wrong octave? Decided now, while the chord is current,
+  // so the label survives into the "Last chord" review
+  const pc = n => ((n % 12) + 12) % 12;
+  const octave = !ok && [...chordTargetNotes, ...chordHitNotes].some(n => pc(n) === pc(midi));
+  const deg = DEGREE_NAMES[(((midi - chordRoot) % 12) + 12) % 12];
+  sungLog.push({ midi, ok, octave, name: spellFromRoot(currentKeyDisplay, deg, midi) });
+  renderSungLog();
+}
+
+// A wrong note goes in the log once it's held as long as a mistake takes
+function trackWrongNote(midi, onChordTone, now) {
+  if (midi === null || onChordTone) { wrongTrackMidi = null; return; }
+  if (wrongTrackMidi !== midi) { wrongTrackMidi = midi; wrongTrackStart = now; return; }
+  if (now - wrongTrackStart >= MISTAKE_HOLD_REQUIRED) {
+    logSung(midi, false);
+    wrongTrackStart = Infinity; // logged; don't count the same held note again
+  }
+}
+
+function renderSungLog() {
+  const el = document.getElementById('sungLog');
+  if (!el) return;
+  const show = gameMode === 'chord' && !isChordIdentify() && sungLog.length > 0;
+  if (!show) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const stale = sungLogRound !== chordRoundId;
+  const root = sungLogChord.root;
+  const chips = sungLog.map(e => {
+    const deg = DEGREE_NAMES[(((e.midi - root) % 12) + 12) % 12];
+    const octave = e.octave;
+    const cls = e.ok ? 'ok' : (octave ? 'bad octave' : 'bad');
+    const tip = e.ok ? `Hit the ${deg}` : octave ? `Right note, wrong octave (${deg})` : `Wrong note: you sang the ${deg}`;
+    return `<span class="sung-chip ${cls}" title="${tip}"><span class="sung-mark">${e.ok ? '✓' : '✗'}</span><b>${deg}</b> ${e.name}${octave ? '<span class="sung-oct">octave</span>' : ''}</span>`;
+  }).join('');
+  const label = stale ? `Last chord · ${sungLogChord.rootName} ${sungLogChord.name}` : 'You sang';
+  el.innerHTML = `<span class="sung-label">${label}</span>${chips}`;
+  el.classList.toggle('stale', stale);
+  el.style.display = '';
 }
 
 // ── CHORD IDENTIFY ──
@@ -1957,6 +2044,7 @@ function updateDisplay() {
   // Refresh the overlearning mastery ticker for the current assignment
   renderMasteryDisplay();
   updateContinueHint();
+  renderSungLog();
 
   if (gameMode === 'bass') {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreBass}`;
@@ -2181,6 +2269,8 @@ async function startGame() {
 
   score = 0;
   holdStart = 0;
+  sungLog = [];        // a new game starts with a clean log
+  sungLogRound = -1;
   listenPaused = false;
   awaitingContinue = MANUAL_ADVANCE; // first assignment waits for you too
 
@@ -2570,6 +2660,7 @@ function gameLoop() {
         for (const t of chordHitNotes) { if (Math.abs((midi - t) * 100) < CENTS_TOLERANCE) { onAnyChordTone = true; break; } }
       }
       mistakeHoldCheck(roundedMidi, onAnyChordTone, now);
+      trackWrongNote(roundedMidi, onAnyChordTone, now);
 
       if (absCents < CENTS_TOLERANCE && bestTarget !== null) {
         if (holdingForMidi !== bestTarget) { holdStart = now; holdingForMidi = bestTarget; }
@@ -2579,6 +2670,7 @@ function gameLoop() {
           // Note confirmed!
           chordTargetNotes.delete(bestTarget);
           chordHitNotes.add(bestTarget);
+          logSung(bestTarget, true);
           holdStart = 0;
           holdingForMidi = null;
           holdBar.style.width = '0%';
@@ -2659,6 +2751,7 @@ function gameLoop() {
     // No signal = reset wrong-hold so a brief pause doesn't count against them
     wrongHoldStart = 0;
     wrongHoldingPC = null;
+    wrongTrackMidi = null;
     if (gameMode === 'bass') {
       updateBassPiano(null);
     } else if (gameMode === 'chord') {

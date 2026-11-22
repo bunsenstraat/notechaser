@@ -1205,6 +1205,57 @@ body::before {
   50% { opacity: 1; }
 }
 
+/* ── SUNG-NOTE LOG (chord mode) ── */
+.sung-log {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin: 2px auto 0;
+  max-width: 560px;
+  flex-shrink: 0;
+}
+.sung-label {
+  flex-basis: 100%;
+  text-align: center;
+  font-family: 'Orbitron', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.sung-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.85rem;
+  padding: 4px 9px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+.sung-chip b { font-weight: 700; }
+.sung-mark { font-size: 0.75rem; }
+.sung-chip.ok { border-color: var(--green-dim); color: var(--green); }
+.sung-chip.bad { border-color: var(--red-dim); color: var(--red); }
+.sung-chip.octave { border-color: #ffcc0055; color: var(--yellow); }
+.sung-oct {
+  font-size: 0.6rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+/* The previous chord, kept up for review until you start singing the next */
+.sung-log.stale { opacity: 0.6; }
+
+.piano-key.active-wrong {
+  background: linear-gradient(180deg, var(--red), #aa1133) !important;
+  box-shadow: 0 0 12px var(--red);
+}
+
 /* ── CHORD IDENTIFY ── */
 .identify-grid { display: none; }
 
@@ -1466,6 +1517,8 @@ body::before {
 .pk-white.mirror-target { background: linear-gradient(180deg, #7ff4ff, #21b9d4); }
 .pk-black.mirror-target { background: linear-gradient(180deg, #21b9d4, #05707f); }
 .pk-white.mirror-hit { background: linear-gradient(180deg, var(--green), #00aa55); }
+.pk-white.mirror-wrong { background: linear-gradient(180deg, var(--red), #aa1133); }
+.pk-black.mirror-wrong { background: linear-gradient(180deg, #aa1133, #6d0b21); }
 .pk-black.mirror-hit { background: linear-gradient(180deg, #00aa55, #007038); }
 .pk-white.mirror-from .pk-label,
 .pk-white.mirror-target .pk-label,
