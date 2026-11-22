@@ -134,7 +134,7 @@ function handleMidiMessage(msg) {
 function onMidiNoteChange() {
   if (!gameActive || melodyPlaying || !useMidi) return;
   if (!listenGateOpen()) return; // waiting for the player to start the assignment
-  if (isChordIdentify()) return;  // answers come from the buttons
+  if (isChordIdentify() || isProgEar()) return;  // answers come from the buttons
 
   if (gameMode === 'chord') {
     // Chord mode: check if held notes match all target notes
@@ -289,8 +289,8 @@ function setInputMode(midi) {
 let inputHintNotice = ''; // one-off "X was turned off" message, cleared on start
 
 function refreshInputHint() {
-  let text = isChordIdentify()
-    ? 'No microphone needed — listen, then pick the chord'
+  let text = isChordIdentify() || isProgEar()
+    ? 'No microphone needed — listen, then pick the answer'
     : useMidi
       ? 'Connect a MIDI keyboard — or use the on-screen keyboard at the bottom'
       : 'Microphone access required for pitch detection';
@@ -1015,9 +1015,21 @@ function updateStartBtn() {
   if (gameMode === 'harmonic') {
     document.getElementById('startBtn').disabled = selectedScale === null;
   } else if (gameMode === 'chord') {
-    document.getElementById('startBtn').disabled = selectedChords.size === 0;
+    // Answering by position/quality plays only A/B/C position chords
+    document.getElementById('startBtn').disabled = identifyPlayable().length === 0;
+    const note = document.getElementById('identifyByNote');
+    if (note) {
+      const needPos = isChordIdentify() && identifyAnswerBy !== 'type';
+      note.textContent = needPos
+        ? (identifyPlayable().length ? `Plays only the ${identifyPlayable().length} A/B/C position chords you've selected.` : 'Select some A/B/C position chords (the A pos / B pos / C pos presets).')
+        : '';
+    }
   } else if (gameMode === 'bass') {
-    document.getElementById('startBtn').disabled = selectedCadences.size === 0;
+    const naming = isProgEar();
+    document.getElementById('startBtn').disabled = naming ? pePlayable().length === 0 : selectedCadences.size === 0;
+    const note = document.getElementById('bassExNote');
+    if (note) note.textContent = naming && pePlayable().length === 0 && selectedCadences.size > 0
+      ? 'Single chords have no progression to name — select some progressions.' : '';
   } else if (gameMode === 'scale') {
     document.getElementById('startBtn').disabled = selectedScalesForSing.size === 0;
   } else if (gameMode === 'licks') {
@@ -1188,7 +1200,9 @@ function playAnswer() {
 
 function replayBaseNote() {
   if (!gameActive || melodyPlaying) return;
-  if (gameMode === 'bass') {
+  if (isProgEar()) {
+    peReplay();
+  } else if (gameMode === 'bass') {
     playCadence(bassCadenceChords, () => {
       roundStart = performance.now();
     });
@@ -1247,6 +1261,9 @@ document.addEventListener('keydown', (e) => {
     // Useful in mic modes when you know you blew it but the timer hasn't run out.
     e.preventDefault();
     skipCurrentAssignment();
+  } else if (gameActive && isProgEar() && /^[1-9]$/.test(e.key)) {
+    const v = peOrder[+e.key - 1];
+    if (v !== undefined) { e.preventDefault(); peAnswer(v); }
   } else if (gameActive && isChordIdentify() && /^[1-9]$/.test(e.key)) {
     const idx = identifyOrder[+e.key - 1];
     if (idx !== undefined) { e.preventDefault(); answerIdentify(idx); }
@@ -1295,18 +1312,86 @@ async function startMic() {
   initAudio();
   // Resume AudioContext (required on mobile after user gesture)
   if (audioCtx.state === 'suspended') await audioCtx.resume();
-  const source = audioCtx.createMediaStreamSource(micStream);
-  analyser = audioCtx.createAnalyser();
-  // Use larger FFT for better low-frequency resolution on high sample rate devices
+  stopPitchChain();
+  micSource = audioCtx.createMediaStreamSource(micStream);
+  // Larger window for better low-frequency resolution on high sample rate devices
   const sr = audioCtx.sampleRate;
-  analyser.fftSize = sr > 44100 ? 8192 : 4096;
+  const size = sr > 44100 ? 8192 : 4096;
+  const how = (await startPitchWorker(micSource, size)) ? 'worker' : (startPitchAnalyser(micSource, size), 'main thread');
+  console.log('Mic started: sampleRate=' + sr + ', window=' + size + ', detection on ' + how);
+}
+
+// Detection normally runs in a Web Worker, fed by an AudioWorklet that taps
+// the mic: neither the UI nor the audio thread does the maths. Where that
+// isn't available (or fails to start) it falls back to an AnalyserNode read
+// on the main thread every frame.
+let micSource = null, pitchNode = null, pitchWorker = null;
+let pitchLatest = null, pitchLatestAt = 0, pitchWorkletReady = false, pitchWatchdog = null;
+
+async function startPitchWorker(source, size) {
+  if (!audioCtx.audioWorklet || typeof Worker === 'undefined' || typeof AudioWorkletNode === 'undefined') return false;
+  try {
+    if (!pitchWorkletReady) {
+      await audioCtx.audioWorklet.addModule('js/pitch-worklet.js');
+      pitchWorkletReady = true;
+    }
+    const worker = new Worker('js/pitch-worker.js');
+    const channel = new MessageChannel();
+    worker.postMessage({ type: 'init', sampleRate: audioCtx.sampleRate, size, port: channel.port2 }, [channel.port2]);
+    const node = new AudioWorkletNode(audioCtx, 'pitch-tap', {
+      numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
+      channelCount: 1, channelCountMode: 'explicit', // mic down-mixed to mono, like the analyser did
+    });
+    node.port.postMessage({ port: channel.port1 }, [channel.port1]);
+    pitchLatest = null;
+    pitchLatestAt = 0;
+    worker.onmessage = e => { pitchLatest = e.data; pitchLatestAt = performance.now(); };
+    const fallBack = why => {
+      if (pitchWorker !== worker) return;
+      console.warn('Pitch worker unavailable (' + why + ') — detecting on the main thread');
+      teardownPitchWorker();
+      if (micSource === source) startPitchAnalyser(source, size);
+    };
+    worker.onerror = e => { e.preventDefault && e.preventDefault(); fallBack('error'); };
+    source.connect(node);
+    node.connect(audioCtx.destination); // silent — but keeps the node pulled on every browser
+    pitchWorker = worker;
+    pitchNode = node;
+    // Nothing heard back within a couple of seconds → something's blocked
+    clearTimeout(pitchWatchdog);
+    pitchWatchdog = setTimeout(() => { if (pitchWorker === worker && !pitchLatestAt) fallBack('no data'); }, 2500);
+    return true;
+  } catch (e) {
+    console.warn('AudioWorklet pitch detection failed to start:', e);
+    teardownPitchWorker();
+    return false;
+  }
+}
+
+function startPitchAnalyser(source, size) {
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = size;
   analyser.smoothingTimeConstant = 0;
   source.connect(analyser);
   pitchBuffer = new Float32Array(analyser.fftSize);
-  console.log('Mic started: sampleRate=' + sr + ', fftSize=' + analyser.fftSize);
+}
+
+function teardownPitchWorker() {
+  clearTimeout(pitchWatchdog);
+  if (pitchNode) { try { pitchNode.disconnect(); } catch (e) {} pitchNode = null; }
+  if (pitchWorker) { pitchWorker.terminate(); pitchWorker = null; }
+  pitchLatest = null;
+  pitchLatestAt = 0;
+}
+
+function stopPitchChain() {
+  teardownPitchWorker();
+  if (analyser) { try { analyser.disconnect(); } catch (e) {} analyser = null; }
+  if (micSource) { try { micSource.disconnect(); } catch (e) {} micSource = null; }
 }
 
 function stopMic() {
+  stopPitchChain();
   if (micStream) {
     micStream.getTracks().forEach(t => t.stop());
     micStream = null;
@@ -1314,6 +1399,13 @@ function stopMic() {
 }
 
 function detectPitch() {
+  if (pitchWorker) {
+    // The worker's latest reading — ignored once stale (it reports ~45×/s)
+    const r = pitchLatest;
+    if (!r || performance.now() - pitchLatestAt > 250) return null;
+    if (r.rms < RMS_THRESHOLD || r.freq === null || r.ratio < CONFIDENCE_THRESHOLD) return null;
+    return r.freq;
+  }
   if (!analyser) return null;
   analyser.getFloatTimeDomainData(pitchBuffer);
 
@@ -1323,10 +1415,13 @@ function detectPitch() {
   rms = Math.sqrt(rms / pitchBuffer.length);
   if (rms < RMS_THRESHOLD) return null;
 
-  // Autocorrelation
+  // Autocorrelation — only over the lags the search below can use
   const SIZE = pitchBuffer.length;
+  const sampleRate = audioCtx.sampleRate;
+  const minLag = Math.floor(sampleRate / 600); // max ~600Hz
+  const maxLag = Math.floor(sampleRate / 55);  // min ~55Hz
   const corr = new Float32Array(SIZE);
-  for (let lag = 0; lag < SIZE; lag++) {
+  for (let lag = 0; lag <= Math.min(SIZE - 1, maxLag + 1); lag++) {
     let sum = 0;
     for (let i = 0; i < SIZE - lag; i++) {
       sum += pitchBuffer[i] * pitchBuffer[i + lag];
@@ -1336,12 +1431,9 @@ function detectPitch() {
 
   // Find first dip then peak
   let d = 0;
-  while (d < SIZE - 1 && corr[d] > corr[d + 1]) d++;
+  while (d < maxLag && corr[d] > corr[d + 1]) d++;
 
   let maxVal = -1, maxIdx = -1;
-  const sampleRate = audioCtx.sampleRate;
-  const minLag = Math.floor(sampleRate / 600); // max ~600Hz
-  const maxLag = Math.floor(sampleRate / 55);  // min ~55Hz
 
   for (let i = Math.max(d, minLag); i < Math.min(SIZE - 1, maxLag); i++) {
     if (corr[i] > maxVal) {
@@ -1644,7 +1736,7 @@ function chordFitsRoot(chordType, root) {
 }
 
 function chooseNextChord() {
-  const indices = [...selectedChords];
+  const indices = identifyPlayable();
   let candidates = indices;
   if (indices.length > 1 && currentChordType) {
     const lastIdx = CHORD_TYPES.indexOf(currentChordType);
@@ -1776,29 +1868,74 @@ let identifyHeard = false;    // the current chord has started sounding — the
                               // tap in that gap must not grade an unheard chord
 let identifyOrder = [];       // selected chord-type indices, in button order
 let hiScoreChordId = parseInt(localStorage.getItem('notechaser_hi_chord_id') || '0');
+// Separate bests per Identify answer mode — naming a position is a different skill
+const ID_BEST_KEY = { type: 'notechaser_hi_chord_id', position: 'notechaser_hi_chord_pos', quality: 'notechaser_hi_chord_qual' };
+function identifyBest() { return parseInt(localStorage.getItem(ID_BEST_KEY[identifyAnswerBy]) || '0'); }
 
 function chordShapeKey(ct) {
   const lo = Math.min(...ct.intervals);
   return ct.intervals.map(x => x - lo).sort((a, b) => a - b).join(',');
 }
 
-function identifyMatches(idx) {
-  return !!currentChordType && chordShapeKey(CHORD_TYPES[idx]) === chordShapeKey(currentChordType);
+// What the answer buttons name:
+//   'type'     — the chord type (any selected chord)
+//   'position' — A / B / C only; you're told the quality
+//   'quality'  — the quality only, positions mixed
+// The last two play only the A/B/C position chords in the selection.
+let identifyAnswerBy = 'type';
+
+const POSITION_SPELLING = { A: '1 3 5 7', B: '1 7 3 5', C: '1 5 7 3' };
+
+function setIdentifyAnswerBy(mode) {
+  identifyAnswerBy = mode;
+  document.querySelectorAll('.identify-by-btn').forEach(b => b.classList.toggle('selected', b.dataset.idby === mode));
+  updateStartBtn();
+}
+
+// Chord indices the game may play: everything selected, or — when answering
+// by position or quality — only the selected A/B/C position chords
+function identifyPlayable() {
+  const sel = [...selectedChords];
+  if (!isChordIdentify() || identifyAnswerBy === 'type') return sel;
+  return sel.filter(i => CHORD_TYPES[i].pos);
+}
+
+// answer: a chord index (as string or number), a position letter, or a quality
+function identifyMatches(answer) {
+  if (!currentChordType) return false;
+  if (identifyAnswerBy === 'position') return String(answer) === currentChordType.pos;
+  if (identifyAnswerBy === 'quality') return String(answer) === currentChordType.quality;
+  return chordShapeKey(CHORD_TYPES[+answer]) === chordShapeKey(currentChordType);
 }
 
 function buildIdentifyGrid() {
   const grid = document.getElementById('identifyGrid');
   if (!grid) return;
   grid.innerHTML = '';
-  identifyOrder = [...selectedChords].sort((a, b) => a - b);
-  identifyOrder.forEach((idx, n) => {
-    const ct = CHORD_TYPES[idx];
+  const playable = identifyPlayable().sort((a, b) => a - b);
+  let answers; // [{ answer, label, sub }]
+  if (identifyAnswerBy === 'position') {
+    const present = new Set(playable.map(i => CHORD_TYPES[i].pos));
+    answers = ['A', 'B', 'C'].filter(p => present.has(p))
+      .map(p => ({ answer: p, label: `${p} position`, sub: POSITION_SPELLING[p] }));
+  } else if (identifyAnswerBy === 'quality') {
+    const seen = new Map();
+    for (const i of playable) {
+      const ct = CHORD_TYPES[i];
+      if (!seen.has(ct.quality)) seen.set(ct.quality, ct.qualitySpoken || '');
+    }
+    answers = [...seen].map(([q, sp]) => ({ answer: q, label: q, sub: sp }));
+  } else {
+    answers = playable.map(i => ({ answer: String(i), label: CHORD_TYPES[i].name, sub: CHORD_TYPES[i].short }));
+  }
+  identifyOrder = answers.map(a => a.answer);
+  answers.forEach((a, n) => {
     const btn = document.createElement('button');
     btn.className = 'identify-btn';
-    btn.dataset.idx = idx;
+    btn.dataset.answer = a.answer;
     const key = n < 9 ? `<span class="identify-key">${n + 1}</span>` : '';
-    btn.innerHTML = `${key}${ct.name}<span class="chord-label">${ct.short}</span>`;
-    btn.addEventListener('click', () => answerIdentify(idx));
+    btn.innerHTML = `${key}${a.label}<span class="chord-label">${a.sub}</span>`;
+    btn.addEventListener('click', () => answerIdentify(a.answer));
     grid.appendChild(btn);
   });
 }
@@ -1813,12 +1950,12 @@ function resetIdentifyGrid() {
   renderMasteryDisplay();
 }
 
-// Light every button that sounds like the current chord, and show the voicing
-function revealIdentify(chosenIdx, cls) {
+// Light every button that matches the current chord, and show the voicing
+function revealIdentify(chosen, cls) {
   identifyAnswered = true;
   document.querySelectorAll('.identify-btn').forEach(b => {
-    const idx = +b.dataset.idx;
-    if (identifyMatches(idx)) b.classList.add(idx === chosenIdx ? cls : 'also');
+    const ans = b.dataset.answer;
+    if (identifyMatches(ans)) b.classList.add(ans === String(chosen) ? cls : 'also');
   });
   chordHitNotes = new Set(chordTargetNotes);
   chordTargetNotes = new Set();
@@ -1840,17 +1977,18 @@ function advanceIdentify(delay) {
   later(go, delay);
 }
 
-function answerIdentify(idx) {
+function answerIdentify(answer) {
+  answer = String(answer);
   // The game screen, not gameActive: the first chord plays before the game
   // goes active, and an answer during it should count like any other
   const onGameScreen = document.getElementById('game').classList.contains('active');
   if (!onGameScreen || !isChordIdentify() || identifyAnswered || !identifyHeard) return;
   if (!listenGateOpen()) armListening();
-  if (identifyMatches(idx)) {
-    revealIdentify(idx, 'correct');
+  if (identifyMatches(answer)) {
+    revealIdentify(answer, 'correct');
     advanceIdentify(900);
   } else {
-    const btn = document.querySelector(`.identify-btn[data-idx="${idx}"]`);
+    const btn = [...document.querySelectorAll('.identify-btn')].find(b => b.dataset.answer === answer);
     if (btn) { btn.classList.add('wrong'); btn.disabled = true; }
     markAssignmentMistake(); // keep guessing — but the round no longer counts
   }
@@ -1954,6 +2092,7 @@ function showScreen(id) {
   const progressBtn = document.getElementById('progressBtn');
   if (progressBtn) progressBtn.style.display = id === 'setup' ? '' : 'none';
   document.getElementById(id).classList.add('active');
+  document.querySelector('.header').classList.toggle('with-tools', id === 'setup');
   disarmGameBack();
   // The playable keyboard dock only rides along with the game screen
   if (typeof pkOnScreenChange === 'function') pkOnScreenChange(id);
@@ -2040,13 +2179,17 @@ function updateDisplay() {
   // Hide answer button by default; chord mode will show it for sing
   document.getElementById('answerBtn').style.display = 'none';
   setNoteBoxLabels('From', 'Sing');
-  document.getElementById('game').classList.toggle('identify-mode', isChordIdentify());
+  document.getElementById('game').classList.toggle('identify-mode', isChordIdentify() || isProgEar());
+  peRenderSlots();
   // Refresh the overlearning mastery ticker for the current assignment
   renderMasteryDisplay();
   updateContinueHint();
   renderSungLog();
 
-  if (gameMode === 'bass') {
+  if (isProgEar()) {
+    document.getElementById('hiScoreGame').textContent = `BEST: ${peBest()}`;
+    peRender();
+  } else if (gameMode === 'bass') {
     document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreBass}`;
     const isSingle = currentCadence.chords.length === 1;
     const chordName = currentCadence.chords[bassIndex] ? currentCadence.chords[bassIndex].name : '✓';
@@ -2063,8 +2206,11 @@ function updateDisplay() {
       : 'Press <kbd>SPACE</kbd> or tap here to replay cadence';
     updateBassPiano(null);
   } else if (gameMode === 'chord' && isChordIdentify()) {
-    document.getElementById('hiScoreGame').textContent = `BEST: ${hiScoreChordId}`;
-    document.getElementById('intervalDisplay').textContent = 'Which chord is this?';
+    document.getElementById('hiScoreGame').textContent = `BEST: ${identifyBest()}`;
+    document.getElementById('intervalDisplay').textContent =
+      identifyAnswerBy === 'position' ? `${currentChordType.quality} — which position?`
+      : identifyAnswerBy === 'quality' ? 'Which quality?'
+      : 'Which chord is this?';
     setNoteBoxLabels('Choices', 'Answer');
     document.getElementById('noteFrom').textContent = identifyOrder.length;
     document.getElementById('noteTarget').textContent = identifyAnswered ? currentChordType.short : '?';
@@ -2186,6 +2332,9 @@ function setChordPlayback(mode) {
     b.classList.toggle('selected', b.dataset.cplay === mode);
   });
   refreshInputHint();
+  const idRow = document.getElementById('identifyByRow');
+  if (idRow) idRow.style.display = mode === 'identify' ? '' : 'none';
+  updateStartBtn();
   if (gameMode === 'chord') buildPiano();
 }
 
@@ -2247,7 +2396,7 @@ async function startGame() {
   // Rebind MIDI out if the device was plugged in after the page loaded
   if (MIDI_OUT_CFG.id && !midiOutActive()) await configureMidiOut(MIDI_OUT_CFG);
 
-  if (isChordIdentify()) {
+  if (isChordIdentify() || isProgEar()) {
     initAudio(); // answers come from the buttons — nothing to listen to
   } else if (useMidi) {
     const ok = await initMidi();
@@ -2281,7 +2430,9 @@ async function startGame() {
   beginAssignmentAttempt(); // first round of the game starts clean
   showScreen('game');
 
-  if (gameMode === 'bass') {
+  if (isProgEar()) {
+    peStartGame(); // name the progression / roots / positions (js/progear.js)
+  } else if (gameMode === 'bass') {
     bassKeyRoot = pickBassKey();
     currentKeyDisplay = jazzNoteName(bassKeyRoot);
     const indices = [...selectedCadences];
@@ -2572,8 +2723,8 @@ function gameLoop() {
     return;
   }
 
-  // Identify: answers come from the buttons, just keep the timer running
-  if (isChordIdentify()) {
+  // Identify / progressions by ear: answers come from the buttons
+  if (isChordIdentify() || isProgEar()) {
     animFrame = requestAnimationFrame(gameLoop);
     return;
   }
@@ -2834,6 +2985,7 @@ function mistakeHoldCheck(roundedMidi, isTargetMatch, now) {
 function skipCurrentAssignment() {
   if (!gameActive || melodyPlaying) return;
   if (isChordIdentify() && identifyAnswered) return; // already right, don't taint it
+  if (isProgEar()) { peSkip(); return; }             // reveals the answer itself
   // Mark the round tainted — onSuccess will commit as mistake and skip reward
   markAssignmentMistake();
 
@@ -2888,7 +3040,10 @@ function skipCurrentAssignment() {
   // Identify: show what it was before moving on — that's the learning moment
   if (isChordIdentify()) {
     if (identifyAnswered) return;
-    revealIdentify(CHORD_TYPES.indexOf(currentChordType), 'reveal');
+    const truth = identifyAnswerBy === 'position' ? currentChordType.pos
+      : identifyAnswerBy === 'quality' ? currentChordType.quality
+      : CHORD_TYPES.indexOf(currentChordType);
+    revealIdentify(truth, 'reveal');
     advanceIdentify(1400);
     return;
   }
@@ -2914,6 +3069,8 @@ function currentAssignmentInfo() {
       const idx = CHORD_TYPES.indexOf(currentChordType);
       if (idx < 0) return null;
       if (isChordIdentify()) {
+        if (identifyAnswerBy === 'position') return { key: `chord-pos:${idx}`, label: `${currentChordType.name} (which position)`, mode: 'chord' };
+        if (identifyAnswerBy === 'quality') return { key: `chord-qual:${idx}`, label: `${currentChordType.name} (which quality)`, mode: 'chord' };
         return { key: `chord-id:${idx}`, label: `${currentChordType.name} (by ear)`, mode: 'chord' };
       }
       return { key: `chord:${idx}`, label: currentChordType.name, mode: 'chord' };
@@ -2939,6 +3096,7 @@ function currentAssignmentInfo() {
       if (idx < 0) return null;
       return { key: `lick:${idx}`, label: currentLick.name, mode: 'licks' };
     }
+    if (isProgEar()) return peAssignmentInfo();
     if (gameMode === 'bass') {
       if (!currentCadence) return null;
       const cIdx = CADENCES.indexOf(currentCadence);
@@ -2996,6 +3154,7 @@ function renderMasteryDisplay() {
   if (!info) { el.textContent = ''; el.style.display = 'none'; return; }
   // Identify: the label IS the answer — and even the streak count hints at it
   if (isChordIdentify() && !identifyAnswered) { el.textContent = ''; el.style.display = 'none'; return; }
+  if (isProgEar() && !peDone) { el.textContent = ''; el.style.display = 'none'; return; }
   // Peek — don't auto-create a record just for display; show fresh defaults
   // if we haven't tracked this assignment before.
   const stats = progressPeek(info.key) || { currentStreak: 0, mistakes: 0, mastered: false };
@@ -3557,7 +3716,23 @@ function endGame(quit) {
 
   if (!quit) playFailSound();
 
-  if (gameMode === 'bass') {
+  if (isProgEar()) {
+    // Each naming exercise keeps its own best
+    const prevBest = peBest();
+    const isNewBest = score > prevBest;
+    if (isNewBest) localStorage.setItem(`notechaser_hi_prog_${bassExercise}`, String(score));
+    document.getElementById('goScore').textContent = score;
+    document.getElementById('goScoreLabel').textContent =
+      { name: 'Progressions Named', roots: 'Progressions Rooted', positions: 'Positions Named' }[bassExercise];
+    const bestEl = document.getElementById('goBest');
+    if (isNewBest && score > 0) {
+      bestEl.textContent = 'NEW BEST!';
+      bestEl.className = 'go-best go-new-best';
+    } else {
+      bestEl.textContent = `BEST: ${prevBest}`;
+      bestEl.className = 'go-best';
+    }
+  } else if (gameMode === 'bass') {
     const isNewBest = score > hiScoreBass;
     if (isNewBest) {
       hiScoreBass = score;
@@ -3576,12 +3751,12 @@ function endGame(quit) {
   } else if (gameMode === 'chord') {
     // Naming a chord by ear and producing one are different skills — separate bests
     const identify = isChordIdentify();
-    const prevBest = identify ? hiScoreChordId : hiScoreChord;
+    const prevBest = identify ? identifyBest() : hiScoreChord;
     const isNewBest = score > prevBest;
     if (isNewBest) {
       if (identify) {
-        hiScoreChordId = score;
-        localStorage.setItem('notechaser_hi_chord_id', hiScoreChordId);
+        localStorage.setItem(ID_BEST_KEY[identifyAnswerBy], String(score));
+        if (identifyAnswerBy === 'type') hiScoreChordId = score;
       } else {
         hiScoreChord = score;
         localStorage.setItem('notechaser_hi_chord', hiScoreChord);
@@ -3755,6 +3930,7 @@ function backToSetup() {
 
 // ── SETTINGS ──
 function openSettings() {
+  document.querySelector('.header').classList.toggle('with-tools', false);
   document.getElementById('setup').classList.remove('active');
   document.getElementById('settings').classList.add('active');
   document.getElementById('settingsGear').style.display = 'none';
@@ -3764,6 +3940,7 @@ function openSettings() {
 }
 
 function closeSettings() {
+  document.querySelector('.header').classList.toggle('with-tools', true);
   document.getElementById('settings').classList.remove('active');
   document.getElementById('setup').classList.add('active');
   document.getElementById('settingsGear').style.display = '';
@@ -3775,6 +3952,7 @@ function closeSettings() {
 let _progressFilter = 'all';
 
 function openProgress() {
+  document.querySelector('.header').classList.toggle('with-tools', false);
   document.getElementById('setup').classList.remove('active');
   document.getElementById('progress').classList.add('active');
   document.getElementById('settingsGear').style.display = 'none';
@@ -3783,6 +3961,7 @@ function openProgress() {
 }
 
 function closeProgress() {
+  document.querySelector('.header').classList.toggle('with-tools', true);
   document.getElementById('progress').classList.remove('active');
   document.getElementById('setup').classList.add('active');
   document.getElementById('settingsGear').style.display = '';

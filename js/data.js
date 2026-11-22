@@ -455,8 +455,111 @@ for (const pos of ['A', 'B', 'C']) {
   for (const pq of POSITION_QUALITIES) {
     const spelling = ['1', ...POSITION_ORDER[pos].map(k => pq[k])].join(' ');
     const name = `${pq.q} Pos ${pos}`;
-    CHORD_TYPES.push({ name, short: spelling, intervals: iv(spelling), cat: `pos-${pos}` });
+    CHORD_TYPES.push({
+      name, short: spelling, intervals: iv(spelling), cat: `pos-${pos}`,
+      pos, quality: pq.q, qualitySpoken: pq.sp,   // for Identify's "answer by position / quality"
+    });
     SPEECH_MAP[name] = `${pq.sp}, ${pos} position`;
   }
 }
+
+// ── MORE PROGRESSIONS ──
+// The changes that come round in standards all the time. Appended, not
+// inserted: CADENCES / PROGRESSIONS indices are the keys of saved progress.
+CADENCES.push(
+  {
+    name: 'iii-vi-ii-V', short: 'iii⁷→vi⁷→ii⁷→V⁷', cat: 'major',
+    chords: [
+      { degRoot: 4,  name: 'iii-7',  quality: 'm7' },
+      { degRoot: 9,  name: 'vi-7',   quality: 'm7' },
+      { degRoot: 2,  name: 'ii-7',   quality: 'm7' },
+      { degRoot: 7,  name: 'V7',     quality: '7' },
+    ]
+  },
+  {
+    name: 'I-VI7-ii-V', short: 'I△→VI⁷→ii⁷→V⁷', cat: 'major',
+    chords: [
+      { degRoot: 0,  name: 'IMaj7',  quality: 'Maj7' },
+      { degRoot: 9,  name: 'VI7',    quality: '7' },
+      { degRoot: 2,  name: 'ii-7',   quality: 'm7' },
+      { degRoot: 7,  name: 'V7',     quality: '7' },
+    ]
+  },
+  {
+    name: 'Tritone sub', short: 'ii⁷→♭II⁷→I△', cat: 'major',
+    chords: [
+      { degRoot: 2,  name: 'ii-7',   quality: 'm7' },
+      { degRoot: 1,  name: '♭II7',   quality: '7' },
+      { degRoot: 0,  name: 'IMaj7',  quality: 'Maj7' },
+    ]
+  },
+  {
+    name: 'Backdoor ii-V', short: 'iv⁷→♭VII⁷→I△', cat: 'major',
+    chords: [
+      { degRoot: 5,  name: 'iv-7',   quality: 'm7' },
+      { degRoot: 10, name: '♭VII7',  quality: '7' },
+      { degRoot: 0,  name: 'IMaj7',  quality: 'Maj7' },
+    ]
+  },
+  {
+    name: 'I-I7-IV-iv', short: 'I△→I⁷→IV△→iv⁷', cat: 'major',
+    chords: [
+      { degRoot: 0,  name: 'IMaj7',  quality: 'Maj7' },
+      { degRoot: 0,  name: 'I7',     quality: '7' },
+      { degRoot: 5,  name: 'IVMaj7', quality: 'Maj7' },
+      { degRoot: 5,  name: 'iv-7',   quality: 'm7' },
+    ]
+  },
+  {
+    name: 'Minor turnaround', short: 'i⁶→viø→iiø→V⁷alt', cat: 'minor',
+    chords: [
+      { degRoot: 0,  name: 'i-6',    quality: 'm6' },
+      { degRoot: 9,  name: 'viø7',   quality: 'm7b5' },
+      { degRoot: 2,  name: 'iiø7',   quality: 'm7b5' },
+      { degRoot: 7,  name: 'V7alt',  quality: '7alt' },
+    ]
+  },
+);
+
+// ii-V-I with root-position voicings, alternating so the upper voices move
+// by step: ii in A (3 5 7 on top) → V in B (7 3 5) → I in A, and the mirror.
+PROGRESSIONS.push(
+  {
+    name: 'ii-V-I positions A-B-A', short: 'ii⁷ A → V⁷ B → I△ A', cat: 'positions',
+    chords: [
+      { degRoot: 2, chordName: 'Min7 Pos A' },
+      { degRoot: 7, chordName: 'Dom7 Pos B' },
+      { degRoot: 0, chordName: 'Maj7 Pos A' },
+    ]
+  },
+  {
+    name: 'ii-V-I positions B-A-B', short: 'ii⁷ B → V⁷ A → I△ B', cat: 'positions',
+    chords: [
+      { degRoot: 2, chordName: 'Min7 Pos B' },
+      { degRoot: 7, chordName: 'Dom7 Pos A' },
+      { degRoot: 0, chordName: 'Maj7 Pos B' },
+    ]
+  },
+  {
+    name: 'minor ii-V-i positions A-B-A', short: 'iiø A → V⁷ B → i⁶ A', cat: 'positions',
+    chords: [
+      { degRoot: 2, chordName: 'Half-Dim7 Pos A' },
+      { degRoot: 7, chordName: 'Dom7 Pos B' },
+      { degRoot: 0, chordName: 'Min6 Pos A' },
+    ]
+  },
+  {
+    name: 'minor ii-V-i positions B-A-B', short: 'iiø B → V⁷ A → i⁶ B', cat: 'positions',
+    chords: [
+      { degRoot: 2, chordName: 'Half-Dim7 Pos B' },
+      { degRoot: 7, chordName: 'Dom7 Pos A' },
+      { degRoot: 0, chordName: 'Min6 Pos B' },
+    ]
+  },
+);
+Object.assign(SPEECH_MAP, {
+  'iii-vi-ii-V': 'three six two five', 'I-VI7-ii-V': 'one, six dominant, two five',
+  'Tritone sub': 'tritone substitution', 'Backdoor ii-V': 'backdoor two five',
+  'I-I7-IV-iv': 'one, one seven, four, minor four', 'Minor turnaround': 'minor turnaround',
+});
 
