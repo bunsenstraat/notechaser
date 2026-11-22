@@ -171,10 +171,10 @@ function pePlay(withReference, done) {
   });
 }
 
+// Just the tonic — "major" or "minor" would give the progression away
 function peIntro(done) {
-  const isMinor = peProg.cat === 'minor';
   if (bassAnnounceKey) {
-    speak(`${speechify(currentKeyDisplay)} ${isMinor ? 'minor' : 'major'}`, () => pePlay(true, done));
+    speak(`key of ${speechify(currentKeyDisplay)}`, () => pePlay(true, done));
   } else {
     pePlay(false, done);
   }
@@ -184,7 +184,7 @@ function peIntro(done) {
 function peAnswers() {
   if (bassExercise === 'name') {
     return pePlayable().sort((a, b) => a - b)
-      .map(i => ({ value: String(i), label: CADENCES[i].name, sub: CADENCES[i].short }));
+      .map(i => ({ value: String(i), label: CADENCES[i].name, sub: CADENCES[i].short.replace(/→/g, '→\u200b') }));
   }
   if (bassExercise === 'positions') {
     return [{ value: 'A', label: 'A position', sub: '1 3 5 7' }, { value: 'B', label: 'B position', sub: '1 7 3 5' }];
@@ -381,7 +381,12 @@ function peRender() {
 function peRenderSlots() {
   const el = document.getElementById('progSlots');
   if (!el) return;
-  if (!isProgEar() || !peProg) { el.style.display = 'none'; return; }
+  // Naming the progression: even the number of slots is a clue, so no slots
+  // until it's answered
+  if (!isProgEar() || !peProg || (bassExercise === 'name' && !peDone && peStep < peChords.length)) {
+    el.style.display = 'none';
+    return;
+  }
   el.innerHTML = peChords.map((c, i) => {
     const known = i < peStep;
     const current = i === peStep && !peDone && bassExercise !== 'name';

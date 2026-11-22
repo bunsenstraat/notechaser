@@ -387,9 +387,9 @@ body::before {
 
 .logo {
   font-family: 'Orbitron', monospace;
-  font-size: 2.2rem;
+  font-size: clamp(1.4rem, 8.5vw, 2.2rem); /* fits 320–360px phones too */
   font-weight: 900;
-  letter-spacing: 6px;
+  letter-spacing: clamp(3px, 1.5vw, 6px);
   background: linear-gradient(135deg, var(--cyan), var(--magenta));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -468,7 +468,7 @@ body::before {
 
 .scale-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr)); /* long labels wrap instead of widening the page */
   gap: 8px;
 }
 
@@ -502,6 +502,7 @@ body::before {
 
 .scale-btn .chord-label {
   display: block;
+  overflow-wrap: anywhere;
   font-size: 0.6rem;
   color: var(--text-dim);
   margin-top: 2px;
@@ -1313,8 +1314,9 @@ body::before {
 #game.identify-mode .pitch-area { display: none; }
 #game.identify-mode .identify-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(132px, 100%), 1fr));
   gap: 8px;
+  grid-auto-rows: max-content; /* rows fit their labels — never squeezed to fit the screen */
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -1343,6 +1345,7 @@ body::before {
 .identify-btn:hover:not(:disabled) { border-color: var(--cyan-dim); background: var(--surface2); }
 .identify-btn:active:not(:disabled) { transform: scale(0.98); }
 .identify-btn .chord-label {
+  overflow-wrap: anywhere;
   display: block;
   font-size: 0.65rem;
   font-weight: 400;

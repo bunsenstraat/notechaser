@@ -269,7 +269,9 @@ const CADENCES = [
     ]
   },
   {
-    name: 'Rhythm Bridge', short: 'I△→IV⁷→iii⁷→vi⁷', cat: 'major',
+    // Was labelled "Rhythm Bridge", which it isn't — the real one (III7 VI7
+    // II7 V7) is appended below. Same slot, so its saved progress stays put.
+    name: 'I-IV7-iii-vi', short: 'I△→IV⁷→iii⁷→vi⁷', cat: 'major',
     chords: [
       { degRoot: 0,  name: 'IMaj7',   quality: 'Maj7' },
       { degRoot: 5,  name: 'IV7',     quality: 'IV7' },
@@ -411,7 +413,7 @@ const SPEECH_MAP = {
   'minor ii-V-I in B': 'minor two five one, type B',
   'Turnaround':'turnaround',
   'Minor ii-V-i':'minor two five one',
-  'Rhythm Bridge':'rhythm bridge',
+  'I-IV7-iii-vi':'one, four seven, three, six',
   'ii-V':'two five',
   'Plagal':'plagal',
   'IMaj7':'one major 7',
@@ -557,6 +559,126 @@ PROGRESSIONS.push(
     ]
   },
 );
+// Some favourites, for playing around: cycles, Coltrane, Dameron, the
+// standards' bridges and turnarounds.
+CADENCES.push(
+  {
+    name: 'Rhythm changes bridge', short: 'III⁷→VI⁷→II⁷→V⁷', cat: 'major',
+    chords: [
+      { degRoot: 4,  name: 'III7',   quality: '7' },
+      { degRoot: 9,  name: 'VI7',    quality: '7' },
+      { degRoot: 2,  name: 'II7',    quality: '7' },
+      { degRoot: 7,  name: 'V7',     quality: '7' },
+    ]
+  },
+  {
+    name: 'Dominant cycle', short: 'VI⁷→II⁷→V⁷→I△', cat: 'major',
+    chords: [
+      { degRoot: 9,  name: 'VI7',    quality: '7' },
+      { degRoot: 2,  name: 'II7',    quality: '7' },
+      { degRoot: 7,  name: 'V7',     quality: '7' },
+      { degRoot: 0,  name: 'IMaj7',  quality: 'Maj7' },
+    ]
+  },
+  {
+    name: 'Autumn cycle', short: 'ii⁷→V⁷→I△→IV△→viiø→III⁷alt→vi⁶', cat: 'major',
+    chords: [
+      { degRoot: 2,  name: 'ii-7',   quality: 'm7' },
+      { degRoot: 7,  name: 'V7',     quality: '7' },
+      { degRoot: 0,  name: 'IMaj7',  quality: 'Maj7' },
+      { degRoot: 5,  name: 'IVMaj7', quality: 'Maj7' },
+      { degRoot: 11, name: 'viiø7',  quality: 'm7b5' },
+      { degRoot: 4,  name: 'III7alt', quality: '7alt' },
+      { degRoot: 9,  name: 'vi-6',   quality: 'm6' },
+    ]
+  },
+  {
+    name: 'Descending ii-Vs', short: 'iii⁷→VI⁷→♭iii⁷→♭VI⁷→ii⁷→V⁷', cat: 'major',
+    chords: [
+      { degRoot: 4,  name: 'iii-7',  quality: 'm7' },
+      { degRoot: 9,  name: 'VI7',    quality: '7' },
+      { degRoot: 3,  name: '♭iii-7', quality: 'm7' },
+      { degRoot: 8,  name: '♭VI7',   quality: '7' },
+      { degRoot: 2,  name: 'ii-7',   quality: 'm7' },
+      { degRoot: 7,  name: 'V7',     quality: '7' },
+    ]
+  },
+  {
+    name: 'Coltrane changes', short: 'ii⁷→♭III⁷→♭VI△→VII⁷→III△→V⁷→I△', cat: 'major',
+    chords: [
+      { degRoot: 2,  name: 'ii-7',   quality: 'm7' },
+      { degRoot: 3,  name: '♭III7',  quality: '7' },
+      { degRoot: 8,  name: '♭VIMaj7', quality: 'Maj7' },
+      { degRoot: 11, name: 'VII7',   quality: '7' },
+      { degRoot: 4,  name: 'IIIMaj7', quality: 'Maj7' },
+      { degRoot: 7,  name: 'V7',     quality: '7' },
+      { degRoot: 0,  name: 'IMaj7',  quality: 'Maj7' },
+    ]
+  },
+  // Tadd Dameron's turnaround: down in major 3rds / up in 4ths. Lady Bird
+  // ends on it with every chord a major 7th; the common variant makes the
+  // ♭III and ♭II dominants.
+  {
+    name: 'Lady Bird turnaround', short: 'I△→♭III△→♭VI△→♭II△', cat: 'major',
+    chords: [
+      { degRoot: 0,  name: 'IMaj7',   quality: 'Maj7' },
+      { degRoot: 3,  name: '♭IIIMaj7', quality: 'Maj7' },
+      { degRoot: 8,  name: '♭VIMaj7', quality: 'Maj7' },
+      { degRoot: 1,  name: '♭IIMaj7', quality: 'Maj7' },
+    ]
+  },
+  {
+    name: 'Dameron turnaround', short: 'I△→♭III⁷→♭VI△→♭II⁷', cat: 'major',
+    chords: [
+      { degRoot: 0,  name: 'IMaj7',  quality: 'Maj7' },
+      { degRoot: 3,  name: '♭III7',  quality: '7' },
+      { degRoot: 8,  name: '♭VIMaj7', quality: 'Maj7' },
+      { degRoot: 1,  name: '♭II7',   quality: '7' },
+    ]
+  },
+  {
+    name: 'Chromatic turnaround', short: 'I△→♭III⁷→ii⁷→♭II⁷', cat: 'major',
+    chords: [
+      { degRoot: 0,  name: 'IMaj7',  quality: 'Maj7' },
+      { degRoot: 3,  name: '♭III7',  quality: '7' },
+      { degRoot: 2,  name: 'ii-7',   quality: 'm7' },
+      { degRoot: 1,  name: '♭II7',   quality: '7' },
+    ]
+  },
+  {
+    name: 'ii-V to IV', short: 'v⁷→I⁷→IV△', cat: 'major',
+    chords: [
+      { degRoot: 7,  name: 'v-7',    quality: 'm7' },
+      { degRoot: 0,  name: 'I7',     quality: '7' },
+      { degRoot: 5,  name: 'IVMaj7', quality: 'Maj7' },
+    ]
+  },
+  {
+    name: 'Minor ii-V to major', short: 'iiø→V⁷alt→I△', cat: 'major',
+    chords: [
+      { degRoot: 2,  name: 'iiø7',   quality: 'm7b5' },
+      { degRoot: 7,  name: 'V7alt',  quality: '7alt' },
+      { degRoot: 0,  name: 'IMaj7',  quality: 'Maj7' },
+    ]
+  },
+  {
+    name: 'Minor iv-V-i', short: 'iv⁷→V⁷alt→i⁶', cat: 'minor',
+    chords: [
+      { degRoot: 5,  name: 'iv-7',   quality: 'm7' },
+      { degRoot: 7,  name: 'V7alt',  quality: '7alt' },
+      { degRoot: 0,  name: 'i-6',    quality: 'm6' },
+    ]
+  },
+);
+
+Object.assign(SPEECH_MAP, {
+  'Rhythm changes bridge': 'rhythm changes bridge', 'Dominant cycle': 'dominant cycle',
+  'Autumn cycle': 'autumn leaves cycle', 'Descending ii-Vs': 'descending two fives',
+  'Coltrane changes': 'Coltrane changes', 'Lady Bird turnaround': 'lady bird turnaround', 'Dameron turnaround': 'Tadd Dameron turnaround',
+  'Chromatic turnaround': 'chromatic turnaround', 'ii-V to IV': 'two five to four',
+  'Minor ii-V to major': 'minor two five to major', 'Minor iv-V-i': 'minor four five one',
+});
+
 Object.assign(SPEECH_MAP, {
   'iii-vi-ii-V': 'three six two five', 'I-VI7-ii-V': 'one, six dominant, two five',
   'Tritone sub': 'tritone substitution', 'Backdoor ii-V': 'backdoor two five',
